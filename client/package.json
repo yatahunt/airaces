@@ -1,12 +1,15 @@
 {
   "name": "racing-car-client",
   "version": "1.0.0",
-  "description": "Web client for racing car tracker",
+  "scripts": {
+    "build": "webpack"
+  },
   "dependencies": {
-    "google-protobuf": "^3.21.2",
-    "grpc-web": "^1.4.2"
+    "grpc-web": "^1.4.2",
+    "google-protobuf": "^3.21.2"
   },
   "devDependencies": {
-    "protoc-gen-grpc-web": "^1.4.2"
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.4"
   }
 }

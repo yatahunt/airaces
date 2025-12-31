@@ -10,6 +10,18 @@ services:
     networks:
       - racing-net
 
+  envoy:
+    image: envoyproxy/envoy:v1.28-latest
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./envoy.yml:/etc/envoy/envoy.yml
+    command: /usr/local/bin/envoy -c /etc/envoy/envoy.yml
+    depends_on:
+      - grpc-server
+    networks:
+      - racing-net
+
   web-client:
     build:
       context: ./client
@@ -18,6 +30,7 @@ services:
       - "8080:80"
     depends_on:
       - grpc-server
+      - envoy
     networks:
       - racing-net
 
