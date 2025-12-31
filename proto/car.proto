@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package car;
+
+// Go package path - REQUIRED for protoc-gen-go
+option go_package = "./proto";
+
+service CarService {
+  rpc StreamCarPosition(Empty) returns (stream CarPosition);
+}
+
+message Empty {}
+
+message CarPosition {
+  int32 x = 1;
+  int32 y = 2;
+  int64 timestamp = 3;
+}
