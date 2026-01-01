@@ -14,28 +14,77 @@ import (
 
 const (
 	port         = ":50051"
-	moveInterval = 2 * time.Second
-	moveDistance = 50
-	trackWidth   = 800
-	carStartX    = 0
-	carY         = 250
+	moveInterval = time.Second / 15
+	moveDistance = 50.0 / 15.0
+	trackWidth   = 500.0
+	carStartX    = 450.0
+	carY         = 250.0
+	numCars      = 5
+	totalLaps    = 3
 )
+
+type CarInfo struct {
+	carId  string
+	team   string
+	power  float32
+	color  string
+	driver string
+	x      float32
+	y      float32
+}
 
 type CarServer struct {
 	pb.UnimplementedCarServiceServer
-	mu       sync.RWMutex
-	position *pb.CarPosition
-	clients  map[chan *pb.CarPosition]struct{}
+	mu          sync.RWMutex
+	carInfos    []CarInfo
+	carStates   map[string]*pb.CarState
+	raceStatus  *pb.RaceStatus
+	raceStarted time.Time
+	clients     map[chan *pb.RaceUpdate]struct{}
 }
 
 func NewCarServer() *CarServer {
+	// Initialize static car information
+	carInfos := make([]CarInfo, numCars)
+	carStates := make(map[string]*pb.CarState)
+
+	colors := []string{"#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF"}
+	drivers := []string{"Alice", "Bob", "Charlie", "Diana", "Eve"}
+
+	for i := 0; i < numCars; i++ {
+		carId := string(rune('A' + i))
+		carInfos[i] = CarInfo{
+			carId:  carId,
+			team:   "Team " + string(rune('1'+i)),
+			power:  float32(80 + i*5),
+			color:  colors[i],
+			driver: drivers[i],
+			x:      carStartX + float32(i*50),
+			y:      carY + float32(i*60),
+		}
+
+		carStates[carId] = &pb.CarState{
+			CarId:     carId,
+			X:         carInfos[i].x,
+			Y:         carInfos[i].y,
+			Heading:   0.0,
+			Speed:     0.0,
+			Lap:       0,
+			Timestamp: time.Now().UnixNano(),
+		}
+	}
+
 	s := &CarServer{
-		position: &pb.CarPosition{
-			X:         carStartX,
-			Y:         carY,
-			Timestamp: time.Now().Unix(),
+		carInfos:  carInfos,
+		carStates: carStates,
+		raceStatus: &pb.RaceStatus{
+			Status:      "racing",
+			TotalLaps:   totalLaps,
+			RaceTime:    0,
+			LeaderCarId: "A",
 		},
-		clients: make(map[chan *pb.CarPosition]struct{}),
+		raceStarted: time.Now(),
+		clients:     make(map[chan *pb.RaceUpdate]struct{}),
 	}
 
 	go s.startCarMovement()
@@ -52,31 +101,54 @@ func (s *CarServer) startCarMovement() {
 	for range ticker.C {
 		s.mu.Lock()
 
-		// Move car forward
-		s.position.X += moveDistance
+		var leader string
+		maxLap := int32(0)
+		maxX := float32(0)
 
-		// Reset to start if reached end of track
-		if s.position.X > trackWidth {
-			s.position.X = carStartX
-			log.Println("Car completed lap, resetting to start")
+		// Move each car forward with slightly different speeds
+		for i, carInfo := range s.carInfos {
+			carState := s.carStates[carInfo.carId]
+
+			speedMultiplier := 1.0 + float32(i)*0.1
+			carState.X -= moveDistance * speedMultiplier
+			carState.Speed = moveDistance * speedMultiplier * 15
+
+			// Reset to start if reached end of track
+			if carState.X < 0 {
+				carState.X = carStartX
+				carState.Lap++
+				log.Printf("Car %s completed lap %d", carState.CarId, carState.Lap)
+			}
+
+			carState.Timestamp = time.Now().UnixNano()
+
+			// Determine leader
+			if carState.Lap > maxLap || (carState.Lap == maxLap && carState.X > maxX) {
+				maxLap = carState.Lap
+				maxX = carState.X
+				leader = carState.CarId
+			}
 		}
 
-		s.position.Timestamp = time.Now().Unix()
+		// Update race status
+		s.raceStatus.RaceTime = time.Since(s.raceStarted).Milliseconds()
+		s.raceStatus.LeaderCarId = leader
 
-		// Create a copy of the position to send
-		currentPos := &pb.CarPosition{
-			X:         s.position.X,
-			Y:         s.position.Y,
-			Timestamp: s.position.Timestamp,
+		// Check if race is finished
+		if maxLap >= totalLaps {
+			s.raceStatus.Status = "finished"
 		}
 
-		log.Printf("Car moved to position X=%d, Y=%d (clients: %d)",
-			currentPos.X, currentPos.Y, len(s.clients))
+		// Create race update
+		raceUpdate := s.createRaceUpdate()
+
+		log.Printf("Race update - Leader: %s, Time: %dms, Clients: %d",
+			leader, s.raceStatus.RaceTime, len(s.clients))
 
 		// Broadcast to all connected clients
 		for clientChan := range s.clients {
 			select {
-			case clientChan <- currentPos:
+			case clientChan <- raceUpdate:
 				// Successfully sent
 			default:
 				// Client channel full, skip this update
@@ -88,26 +160,81 @@ func (s *CarServer) startCarMovement() {
 	}
 }
 
-func (s *CarServer) StreamCarPosition(req *pb.Empty, stream pb.CarService_StreamCarPositionServer) error {
-	clientChan := make(chan *pb.CarPosition, 10)
+func (s *CarServer) createRaceUpdate() *pb.RaceUpdate {
+	carStates := make([]*pb.CarState, 0, len(s.carStates))
+	for _, state := range s.carStates {
+		carStates = append(carStates, &pb.CarState{
+			CarId:     state.CarId,
+			X:         state.X,
+			Y:         state.Y,
+			Heading:   state.Heading,
+			Speed:     state.Speed,
+			Lap:       state.Lap,
+			Timestamp: state.Timestamp,
+		})
+	}
+
+	return &pb.RaceUpdate{
+		Update: &pb.RaceUpdate_RaceData{
+			RaceData: &pb.RaceData{
+				RaceStatus: &pb.RaceStatus{
+					Status:      s.raceStatus.Status,
+					TotalLaps:   s.raceStatus.TotalLaps,
+					RaceTime:    s.raceStatus.RaceTime,
+					LeaderCarId: s.raceStatus.LeaderCarId,
+				},
+				Cars:      carStates,
+				Timestamp: time.Now().UnixNano(),
+			},
+		},
+	}
+}
+
+func (s *CarServer) StreamRaceUpdates(req *pb.Empty, stream pb.CarService_StreamRaceUpdatesServer) error {
+	clientChan := make(chan *pb.RaceUpdate, 10)
 
 	// Register new client
 	s.mu.Lock()
 	s.clients[clientChan] = struct{}{}
 	clientCount := len(s.clients)
-
-	// Send current position immediately to new client
-	initialPos := &pb.CarPosition{
-		X:         s.position.X,
-		Y:         s.position.Y,
-		Timestamp: s.position.Timestamp,
-	}
 	s.mu.Unlock()
 
 	log.Printf("New client connected (total clients: %d)", clientCount)
 
-	// Send initial position
-	if err := stream.Send(initialPos); err != nil {
+	// Send check-in message with static car information
+	carInfos := make([]*pb.CarInfo, len(s.carInfos))
+	for i, info := range s.carInfos {
+		carInfos[i] = &pb.CarInfo{
+			CarId:  info.carId,
+			Team:   info.team,
+			Power:  info.power,
+			Color:  info.color,
+			Driver: info.driver,
+		}
+	}
+
+	checkInUpdate := &pb.RaceUpdate{
+		Update: &pb.RaceUpdate_CheckIn{
+			CheckIn: &pb.CheckIn{
+				Cars:      carInfos,
+				Timestamp: time.Now().UnixNano(),
+			},
+		},
+	}
+
+	if err := stream.Send(checkInUpdate); err != nil {
+		s.removeClient(clientChan)
+		return err
+	}
+
+	log.Printf("Sent check-in data to client with %d cars", len(carInfos))
+
+	// Send initial race data
+	s.mu.Lock()
+	initialRaceUpdate := s.createRaceUpdate()
+	s.mu.Unlock()
+
+	if err := stream.Send(initialRaceUpdate); err != nil {
 		s.removeClient(clientChan)
 		return err
 	}
@@ -118,9 +245,9 @@ func (s *CarServer) StreamCarPosition(req *pb.Empty, stream pb.CarService_Stream
 		log.Printf("Client disconnected (remaining clients: %d)", len(s.clients))
 	}()
 
-	// Stream position updates to client
-	for pos := range clientChan {
-		if err := stream.Send(pos); err != nil {
+	// Stream race updates to client
+	for raceUpdate := range clientChan {
+		if err := stream.Send(raceUpdate); err != nil {
 			log.Printf("Error sending to client: %v", err)
 			return err
 		}
@@ -129,7 +256,7 @@ func (s *CarServer) StreamCarPosition(req *pb.Empty, stream pb.CarService_Stream
 	return nil
 }
 
-func (s *CarServer) removeClient(clientChan chan *pb.CarPosition) {
+func (s *CarServer) removeClient(clientChan chan *pb.RaceUpdate) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -153,10 +280,12 @@ func main() {
 
 	log.Printf("🏎️  gRPC Racing Car Server listening on %s", port)
 	log.Printf("📊 Configuration:")
+	log.Printf("   - Number of cars: %d", numCars)
+	log.Printf("   - Total laps: %d", totalLaps)
 	log.Printf("   - Move interval: %v", moveInterval)
-	log.Printf("   - Move distance: %d px", moveDistance)
-	log.Printf("   - Track width: %d px", trackWidth)
-	log.Printf("   - Starting position: X=%d, Y=%d", carStartX, carY)
+	log.Printf("   - Move distance: %.2f px", moveDistance)
+	log.Printf("   - Track width: %.2f px", trackWidth)
+	log.Printf("   - Starting position: X=%.2f, Y=%.2f", carStartX, carY)
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)

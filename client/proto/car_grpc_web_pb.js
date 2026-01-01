@@ -78,13 +78,13 @@ proto.car.CarServicePromiseClient =
  * @const
  * @type {!grpc.web.MethodDescriptor<
  *   !proto.car.Empty,
- *   !proto.car.CarPosition>}
+ *   !proto.car.RaceUpdate>}
  */
-const methodDescriptor_CarService_StreamCarPosition = new grpc.web.MethodDescriptor(
-  '/car.CarService/StreamCarPosition',
+const methodDescriptor_CarService_StreamRaceUpdates = new grpc.web.MethodDescriptor(
+  '/car.CarService/StreamRaceUpdates',
   grpc.web.MethodType.SERVER_STREAMING,
   proto.car.Empty,
-  proto.car.CarPosition,
+  proto.car.RaceUpdate,
   /**
    * @param {!proto.car.Empty} request
    * @return {!Uint8Array}
@@ -92,7 +92,7 @@ const methodDescriptor_CarService_StreamCarPosition = new grpc.web.MethodDescrip
   function(request) {
     return request.serializeBinary();
   },
-  proto.car.CarPosition.deserializeBinary
+  proto.car.RaceUpdate.deserializeBinary
 );
 
 
@@ -100,16 +100,16 @@ const methodDescriptor_CarService_StreamCarPosition = new grpc.web.MethodDescrip
  * @param {!proto.car.Empty} request The request proto
  * @param {?Object<string, string>=} metadata User defined
  *     call metadata
- * @return {!grpc.web.ClientReadableStream<!proto.car.CarPosition>}
+ * @return {!grpc.web.ClientReadableStream<!proto.car.RaceUpdate>}
  *     The XHR Node Readable Stream
  */
-proto.car.CarServiceClient.prototype.streamCarPosition =
+proto.car.CarServiceClient.prototype.streamRaceUpdates =
     function(request, metadata) {
   return this.client_.serverStreaming(this.hostname_ +
-      '/car.CarService/StreamCarPosition',
+      '/car.CarService/StreamRaceUpdates',
       request,
       metadata || {},
-      methodDescriptor_CarService_StreamCarPosition);
+      methodDescriptor_CarService_StreamRaceUpdates);
 };
 
 
@@ -117,16 +117,16 @@ proto.car.CarServiceClient.prototype.streamCarPosition =
  * @param {!proto.car.Empty} request The request proto
  * @param {?Object<string, string>=} metadata User defined
  *     call metadata
- * @return {!grpc.web.ClientReadableStream<!proto.car.CarPosition>}
+ * @return {!grpc.web.ClientReadableStream<!proto.car.RaceUpdate>}
  *     The XHR Node Readable Stream
  */
-proto.car.CarServicePromiseClient.prototype.streamCarPosition =
+proto.car.CarServicePromiseClient.prototype.streamRaceUpdates =
     function(request, metadata) {
   return this.client_.serverStreaming(this.hostname_ +
-      '/car.CarService/StreamCarPosition',
+      '/car.CarService/StreamRaceUpdates',
       request,
       metadata || {},
-      methodDescriptor_CarService_StreamCarPosition);
+      methodDescriptor_CarService_StreamRaceUpdates);
 };
 
 
