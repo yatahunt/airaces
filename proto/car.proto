@@ -6,56 +6,114 @@ package car;
 option go_package = "./proto";
 
 service CarService {
+  // Stream race updates to all clients (spectators + players)
   rpc StreamRaceUpdates(Empty) returns (stream RaceUpdate);
+
+  // Players send input via unary request-response (grpc-web safe)
+  rpc SendPlayerInput(PlayerInput) returns (InputAck);
 }
 
+// ---------------------------------------------------
+// Generic empty message
 message Empty {}
 
+// ---------------------------------------------------
 // Static car information - sent once at check-in
 message CarInfo {
   string car_id = 1;
   string team = 2;
-  float power = 3;      // Engine power (e.g., horsepower or 0-100 scale)
-  string color = 4;     // Car color for display
-  string driver = 5;    // Driver name
+  float power = 3; // Engine power (0-100 scale)
+  string color = 4; // Car color for display
+  string driver = 5; // Driver name
 }
 
+// ---------------------------------------------------
+// Player input controls - sent continuously by clients
+message PlayerInput {
+  string car_id = 1;
+  string auth_token = 2; // Secret token to authenticate the player
+
+  // Control inputs (normalized -1.0 to 1.0 or 0.0 to 1.0)
+  float steering = 3; // -1.0 (full left) to 1.0 (full right)
+  float throttle = 4; // 0.0 to 1.0 (acceleration)
+  float brake = 5; // 0.0 to 1.0 (braking force)
+  bool boost = 6; // Boost/nitro button (optional)
+
+  int64 timestamp = 7; // Client send time in ms
+  int32 sequence = 8; // Incrementing sequence number
+}
+
+// ---------------------------------------------------
+// Server response to PlayerInput
+message InputAck {
+  bool accepted = 1; // True if input was accepted
+  string reason = 2; // If rejected, reason (auth, race state, etc.)
+
+  int64 server_time = 3; // Server unix timestamp in ms
+  int64 game_tick = 4; // Game loop tick number when input was processed
+}
+
+// ---------------------------------------------------
 // Dynamic car state during race
 message CarState {
   string car_id = 1;
   float x = 2;
   float y = 3;
-  float heading = 4;    // Direction in degrees (0-360)
-  float speed = 5;      // Current speed
-  int32 lap = 6;        // Current lap number
+  float heading = 4; // Direction in degrees (0-360)
+  float speed = 5; // Current speed
+  int32 lap = 6; // Current lap number
   int64 timestamp = 7;
+
+  // Optional: show last input for debugging/spectating
+  float current_steering = 8;
+  float current_throttle = 9;
 }
 
+// ---------------------------------------------------
 // Race status information
 message RaceStatus {
-  string status = 1;         // "waiting", "racing", "finished"
-  int32 total_laps = 2;      // Total laps in race
-  int64 race_time = 3;       // Elapsed time in milliseconds
-  string leader_car_id = 4;  // Current race leader
+  string status = 1; // "waiting", "racing", "finished"
+  int32 total_laps = 2; // Total laps in race
+  int64 race_time = 3; // Elapsed time in milliseconds
+  string leader_car_id = 4; // Current race leader
 }
 
+// ---------------------------------------------------
 // Check-in message with all static car information
 message CheckIn {
   repeated CarInfo cars = 1;
   int64 timestamp = 2;
 }
 
+// ---------------------------------------------------
 // Race update message with status and all car positions
 message RaceData {
   RaceStatus race_status = 1;
   repeated CarState cars = 2;
   int64 timestamp = 3;
+
+  int64 game_tick = 4; // Added for lag tracking/debugging
 }
 
+// ---------------------------------------------------
 // Union message for streaming different types
 message RaceUpdate {
   oneof update {
-    CheckIn check_in = 1;      // Sent once at connection start
-    RaceData race_data = 2;     // Sent continuously during race
+    CheckIn check_in = 1; // Sent once at connection start
+    RaceData race_data = 2; // Sent continuously during race
   }
+}
+
+// ---------------------------------------------------
+// Optional: Registration/authentication message
+message RegisterPlayer {
+  string car_id = 1;
+  string player_name = 2;
+  string password = 3; // Or use external auth service
+}
+
+message RegisterResponse {
+  bool success = 1;
+  string auth_token = 2; // Token to use in PlayerInput
+  string message = 3; // Error or success message
 }

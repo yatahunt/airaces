@@ -20,13 +20,17 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	CarService_StreamRaceUpdates_FullMethodName = "/car.CarService/StreamRaceUpdates"
+	CarService_SendPlayerInput_FullMethodName   = "/car.CarService/SendPlayerInput"
 )
 
 // CarServiceClient is the client API for CarService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CarServiceClient interface {
+	// Stream race updates to all clients (spectators + players)
 	StreamRaceUpdates(ctx context.Context, in *Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RaceUpdate], error)
+	// Players send input via unary request-response (grpc-web safe)
+	SendPlayerInput(ctx context.Context, in *PlayerInput, opts ...grpc.CallOption) (*InputAck, error)
 }
 
 type carServiceClient struct {
@@ -56,11 +60,24 @@ func (c *carServiceClient) StreamRaceUpdates(ctx context.Context, in *Empty, opt
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type CarService_StreamRaceUpdatesClient = grpc.ServerStreamingClient[RaceUpdate]
 
+func (c *carServiceClient) SendPlayerInput(ctx context.Context, in *PlayerInput, opts ...grpc.CallOption) (*InputAck, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InputAck)
+	err := c.cc.Invoke(ctx, CarService_SendPlayerInput_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CarServiceServer is the server API for CarService service.
 // All implementations must embed UnimplementedCarServiceServer
 // for forward compatibility.
 type CarServiceServer interface {
+	// Stream race updates to all clients (spectators + players)
 	StreamRaceUpdates(*Empty, grpc.ServerStreamingServer[RaceUpdate]) error
+	// Players send input via unary request-response (grpc-web safe)
+	SendPlayerInput(context.Context, *PlayerInput) (*InputAck, error)
 	mustEmbedUnimplementedCarServiceServer()
 }
 
@@ -73,6 +90,9 @@ type UnimplementedCarServiceServer struct{}
 
 func (UnimplementedCarServiceServer) StreamRaceUpdates(*Empty, grpc.ServerStreamingServer[RaceUpdate]) error {
 	return status.Error(codes.Unimplemented, "method StreamRaceUpdates not implemented")
+}
+func (UnimplementedCarServiceServer) SendPlayerInput(context.Context, *PlayerInput) (*InputAck, error) {
+	return nil, status.Error(codes.Unimplemented, "method SendPlayerInput not implemented")
 }
 func (UnimplementedCarServiceServer) mustEmbedUnimplementedCarServiceServer() {}
 func (UnimplementedCarServiceServer) testEmbeddedByValue()                    {}
@@ -106,13 +126,36 @@ func _CarService_StreamRaceUpdates_Handler(srv interface{}, stream grpc.ServerSt
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type CarService_StreamRaceUpdatesServer = grpc.ServerStreamingServer[RaceUpdate]
 
+func _CarService_SendPlayerInput_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PlayerInput)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CarServiceServer).SendPlayerInput(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CarService_SendPlayerInput_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CarServiceServer).SendPlayerInput(ctx, req.(*PlayerInput))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CarService_ServiceDesc is the grpc.ServiceDesc for CarService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var CarService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "car.CarService",
 	HandlerType: (*CarServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "SendPlayerInput",
+			Handler:    _CarService_SendPlayerInput_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "StreamRaceUpdates",

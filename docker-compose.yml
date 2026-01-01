@@ -33,7 +33,17 @@ services:
       - envoy
     networks:
       - racing-net
-
+  web-player:
+    build:
+      context: ./humanplayer
+      dockerfile: Dockerfile
+    ports:
+      - "9090:80"
+    depends_on:
+      - grpc-server
+      - envoy
+    networks:
+      - racing-net
 networks:
   racing-net:
     driver: bridge

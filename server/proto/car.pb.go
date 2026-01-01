@@ -21,6 +21,8 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ---------------------------------------------------
+// Generic empty message
 type Empty struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -57,12 +59,13 @@ func (*Empty) Descriptor() ([]byte, []int) {
 	return file_car_proto_rawDescGZIP(), []int{0}
 }
 
+// ---------------------------------------------------
 // Static car information - sent once at check-in
 type CarInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CarId         string                 `protobuf:"bytes,1,opt,name=car_id,json=carId,proto3" json:"car_id,omitempty"`
 	Team          string                 `protobuf:"bytes,2,opt,name=team,proto3" json:"team,omitempty"`
-	Power         float32                `protobuf:"fixed32,3,opt,name=power,proto3" json:"power,omitempty"` // Engine power (e.g., horsepower or 0-100 scale)
+	Power         float32                `protobuf:"fixed32,3,opt,name=power,proto3" json:"power,omitempty"` // Engine power (0-100 scale)
 	Color         string                 `protobuf:"bytes,4,opt,name=color,proto3" json:"color,omitempty"`   // Car color for display
 	Driver        string                 `protobuf:"bytes,5,opt,name=driver,proto3" json:"driver,omitempty"` // Driver name
 	unknownFields protoimpl.UnknownFields
@@ -134,23 +137,200 @@ func (x *CarInfo) GetDriver() string {
 	return ""
 }
 
-// Dynamic car state during race
-type CarState struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CarId         string                 `protobuf:"bytes,1,opt,name=car_id,json=carId,proto3" json:"car_id,omitempty"`
-	X             float32                `protobuf:"fixed32,2,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,3,opt,name=y,proto3" json:"y,omitempty"`
-	Heading       float32                `protobuf:"fixed32,4,opt,name=heading,proto3" json:"heading,omitempty"` // Direction in degrees (0-360)
-	Speed         float32                `protobuf:"fixed32,5,opt,name=speed,proto3" json:"speed,omitempty"`     // Current speed
-	Lap           int32                  `protobuf:"varint,6,opt,name=lap,proto3" json:"lap,omitempty"`          // Current lap number
-	Timestamp     int64                  `protobuf:"varint,7,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+// ---------------------------------------------------
+// Player input controls - sent continuously by clients
+type PlayerInput struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	CarId     string                 `protobuf:"bytes,1,opt,name=car_id,json=carId,proto3" json:"car_id,omitempty"`
+	AuthToken string                 `protobuf:"bytes,2,opt,name=auth_token,json=authToken,proto3" json:"auth_token,omitempty"` // Secret token to authenticate the player
+	// Control inputs (normalized -1.0 to 1.0 or 0.0 to 1.0)
+	Steering      float32 `protobuf:"fixed32,3,opt,name=steering,proto3" json:"steering,omitempty"`  // -1.0 (full left) to 1.0 (full right)
+	Throttle      float32 `protobuf:"fixed32,4,opt,name=throttle,proto3" json:"throttle,omitempty"`  // 0.0 to 1.0 (acceleration)
+	Brake         float32 `protobuf:"fixed32,5,opt,name=brake,proto3" json:"brake,omitempty"`        // 0.0 to 1.0 (braking force)
+	Boost         bool    `protobuf:"varint,6,opt,name=boost,proto3" json:"boost,omitempty"`         // Boost/nitro button (optional)
+	Timestamp     int64   `protobuf:"varint,7,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // Client send time in ms
+	Sequence      int32   `protobuf:"varint,8,opt,name=sequence,proto3" json:"sequence,omitempty"`   // Incrementing sequence number
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *PlayerInput) Reset() {
+	*x = PlayerInput{}
+	mi := &file_car_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlayerInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlayerInput) ProtoMessage() {}
+
+func (x *PlayerInput) ProtoReflect() protoreflect.Message {
+	mi := &file_car_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlayerInput.ProtoReflect.Descriptor instead.
+func (*PlayerInput) Descriptor() ([]byte, []int) {
+	return file_car_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *PlayerInput) GetCarId() string {
+	if x != nil {
+		return x.CarId
+	}
+	return ""
+}
+
+func (x *PlayerInput) GetAuthToken() string {
+	if x != nil {
+		return x.AuthToken
+	}
+	return ""
+}
+
+func (x *PlayerInput) GetSteering() float32 {
+	if x != nil {
+		return x.Steering
+	}
+	return 0
+}
+
+func (x *PlayerInput) GetThrottle() float32 {
+	if x != nil {
+		return x.Throttle
+	}
+	return 0
+}
+
+func (x *PlayerInput) GetBrake() float32 {
+	if x != nil {
+		return x.Brake
+	}
+	return 0
+}
+
+func (x *PlayerInput) GetBoost() bool {
+	if x != nil {
+		return x.Boost
+	}
+	return false
+}
+
+func (x *PlayerInput) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *PlayerInput) GetSequence() int32 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+// ---------------------------------------------------
+// Server response to PlayerInput
+type InputAck struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Accepted      bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`                       // True if input was accepted
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`                            // If rejected, reason (auth, race state, etc.)
+	ServerTime    int64                  `protobuf:"varint,3,opt,name=server_time,json=serverTime,proto3" json:"server_time,omitempty"` // Server unix timestamp in ms
+	GameTick      int64                  `protobuf:"varint,4,opt,name=game_tick,json=gameTick,proto3" json:"game_tick,omitempty"`       // Game loop tick number when input was processed
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InputAck) Reset() {
+	*x = InputAck{}
+	mi := &file_car_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InputAck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InputAck) ProtoMessage() {}
+
+func (x *InputAck) ProtoReflect() protoreflect.Message {
+	mi := &file_car_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InputAck.ProtoReflect.Descriptor instead.
+func (*InputAck) Descriptor() ([]byte, []int) {
+	return file_car_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *InputAck) GetAccepted() bool {
+	if x != nil {
+		return x.Accepted
+	}
+	return false
+}
+
+func (x *InputAck) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *InputAck) GetServerTime() int64 {
+	if x != nil {
+		return x.ServerTime
+	}
+	return 0
+}
+
+func (x *InputAck) GetGameTick() int64 {
+	if x != nil {
+		return x.GameTick
+	}
+	return 0
+}
+
+// ---------------------------------------------------
+// Dynamic car state during race
+type CarState struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	CarId     string                 `protobuf:"bytes,1,opt,name=car_id,json=carId,proto3" json:"car_id,omitempty"`
+	X         float32                `protobuf:"fixed32,2,opt,name=x,proto3" json:"x,omitempty"`
+	Y         float32                `protobuf:"fixed32,3,opt,name=y,proto3" json:"y,omitempty"`
+	Heading   float32                `protobuf:"fixed32,4,opt,name=heading,proto3" json:"heading,omitempty"` // Direction in degrees (0-360)
+	Speed     float32                `protobuf:"fixed32,5,opt,name=speed,proto3" json:"speed,omitempty"`     // Current speed
+	Lap       int32                  `protobuf:"varint,6,opt,name=lap,proto3" json:"lap,omitempty"`          // Current lap number
+	Timestamp int64                  `protobuf:"varint,7,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	// Optional: show last input for debugging/spectating
+	CurrentSteering float32 `protobuf:"fixed32,8,opt,name=current_steering,json=currentSteering,proto3" json:"current_steering,omitempty"`
+	CurrentThrottle float32 `protobuf:"fixed32,9,opt,name=current_throttle,json=currentThrottle,proto3" json:"current_throttle,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
 func (x *CarState) Reset() {
 	*x = CarState{}
-	mi := &file_car_proto_msgTypes[2]
+	mi := &file_car_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -162,7 +342,7 @@ func (x *CarState) String() string {
 func (*CarState) ProtoMessage() {}
 
 func (x *CarState) ProtoReflect() protoreflect.Message {
-	mi := &file_car_proto_msgTypes[2]
+	mi := &file_car_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -175,7 +355,7 @@ func (x *CarState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CarState.ProtoReflect.Descriptor instead.
 func (*CarState) Descriptor() ([]byte, []int) {
-	return file_car_proto_rawDescGZIP(), []int{2}
+	return file_car_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CarState) GetCarId() string {
@@ -227,6 +407,21 @@ func (x *CarState) GetTimestamp() int64 {
 	return 0
 }
 
+func (x *CarState) GetCurrentSteering() float32 {
+	if x != nil {
+		return x.CurrentSteering
+	}
+	return 0
+}
+
+func (x *CarState) GetCurrentThrottle() float32 {
+	if x != nil {
+		return x.CurrentThrottle
+	}
+	return 0
+}
+
+// ---------------------------------------------------
 // Race status information
 type RaceStatus struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -240,7 +435,7 @@ type RaceStatus struct {
 
 func (x *RaceStatus) Reset() {
 	*x = RaceStatus{}
-	mi := &file_car_proto_msgTypes[3]
+	mi := &file_car_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -252,7 +447,7 @@ func (x *RaceStatus) String() string {
 func (*RaceStatus) ProtoMessage() {}
 
 func (x *RaceStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_car_proto_msgTypes[3]
+	mi := &file_car_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -265,7 +460,7 @@ func (x *RaceStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RaceStatus.ProtoReflect.Descriptor instead.
 func (*RaceStatus) Descriptor() ([]byte, []int) {
-	return file_car_proto_rawDescGZIP(), []int{3}
+	return file_car_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RaceStatus) GetStatus() string {
@@ -296,6 +491,7 @@ func (x *RaceStatus) GetLeaderCarId() string {
 	return ""
 }
 
+// ---------------------------------------------------
 // Check-in message with all static car information
 type CheckIn struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -307,7 +503,7 @@ type CheckIn struct {
 
 func (x *CheckIn) Reset() {
 	*x = CheckIn{}
-	mi := &file_car_proto_msgTypes[4]
+	mi := &file_car_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -319,7 +515,7 @@ func (x *CheckIn) String() string {
 func (*CheckIn) ProtoMessage() {}
 
 func (x *CheckIn) ProtoReflect() protoreflect.Message {
-	mi := &file_car_proto_msgTypes[4]
+	mi := &file_car_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -332,7 +528,7 @@ func (x *CheckIn) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckIn.ProtoReflect.Descriptor instead.
 func (*CheckIn) Descriptor() ([]byte, []int) {
-	return file_car_proto_rawDescGZIP(), []int{4}
+	return file_car_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CheckIn) GetCars() []*CarInfo {
@@ -349,19 +545,21 @@ func (x *CheckIn) GetTimestamp() int64 {
 	return 0
 }
 
+// ---------------------------------------------------
 // Race update message with status and all car positions
 type RaceData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RaceStatus    *RaceStatus            `protobuf:"bytes,1,opt,name=race_status,json=raceStatus,proto3" json:"race_status,omitempty"`
 	Cars          []*CarState            `protobuf:"bytes,2,rep,name=cars,proto3" json:"cars,omitempty"`
 	Timestamp     int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	GameTick      int64                  `protobuf:"varint,4,opt,name=game_tick,json=gameTick,proto3" json:"game_tick,omitempty"` // Added for lag tracking/debugging
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RaceData) Reset() {
 	*x = RaceData{}
-	mi := &file_car_proto_msgTypes[5]
+	mi := &file_car_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -373,7 +571,7 @@ func (x *RaceData) String() string {
 func (*RaceData) ProtoMessage() {}
 
 func (x *RaceData) ProtoReflect() protoreflect.Message {
-	mi := &file_car_proto_msgTypes[5]
+	mi := &file_car_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -386,7 +584,7 @@ func (x *RaceData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RaceData.ProtoReflect.Descriptor instead.
 func (*RaceData) Descriptor() ([]byte, []int) {
-	return file_car_proto_rawDescGZIP(), []int{5}
+	return file_car_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RaceData) GetRaceStatus() *RaceStatus {
@@ -410,6 +608,14 @@ func (x *RaceData) GetTimestamp() int64 {
 	return 0
 }
 
+func (x *RaceData) GetGameTick() int64 {
+	if x != nil {
+		return x.GameTick
+	}
+	return 0
+}
+
+// ---------------------------------------------------
 // Union message for streaming different types
 type RaceUpdate struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -424,7 +630,7 @@ type RaceUpdate struct {
 
 func (x *RaceUpdate) Reset() {
 	*x = RaceUpdate{}
-	mi := &file_car_proto_msgTypes[6]
+	mi := &file_car_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -436,7 +642,7 @@ func (x *RaceUpdate) String() string {
 func (*RaceUpdate) ProtoMessage() {}
 
 func (x *RaceUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_car_proto_msgTypes[6]
+	mi := &file_car_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -449,7 +655,7 @@ func (x *RaceUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RaceUpdate.ProtoReflect.Descriptor instead.
 func (*RaceUpdate) Descriptor() ([]byte, []int) {
-	return file_car_proto_rawDescGZIP(), []int{6}
+	return file_car_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RaceUpdate) GetUpdate() isRaceUpdate_Update {
@@ -493,6 +699,128 @@ func (*RaceUpdate_CheckIn) isRaceUpdate_Update() {}
 
 func (*RaceUpdate_RaceData) isRaceUpdate_Update() {}
 
+// ---------------------------------------------------
+// Optional: Registration/authentication message
+type RegisterPlayer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CarId         string                 `protobuf:"bytes,1,opt,name=car_id,json=carId,proto3" json:"car_id,omitempty"`
+	PlayerName    string                 `protobuf:"bytes,2,opt,name=player_name,json=playerName,proto3" json:"player_name,omitempty"`
+	Password      string                 `protobuf:"bytes,3,opt,name=password,proto3" json:"password,omitempty"` // Or use external auth service
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterPlayer) Reset() {
+	*x = RegisterPlayer{}
+	mi := &file_car_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterPlayer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterPlayer) ProtoMessage() {}
+
+func (x *RegisterPlayer) ProtoReflect() protoreflect.Message {
+	mi := &file_car_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterPlayer.ProtoReflect.Descriptor instead.
+func (*RegisterPlayer) Descriptor() ([]byte, []int) {
+	return file_car_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RegisterPlayer) GetCarId() string {
+	if x != nil {
+		return x.CarId
+	}
+	return ""
+}
+
+func (x *RegisterPlayer) GetPlayerName() string {
+	if x != nil {
+		return x.PlayerName
+	}
+	return ""
+}
+
+func (x *RegisterPlayer) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+type RegisterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	AuthToken     string                 `protobuf:"bytes,2,opt,name=auth_token,json=authToken,proto3" json:"auth_token,omitempty"` // Token to use in PlayerInput
+	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`                      // Error or success message
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterResponse) Reset() {
+	*x = RegisterResponse{}
+	mi := &file_car_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterResponse) ProtoMessage() {}
+
+func (x *RegisterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_car_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterResponse.ProtoReflect.Descriptor instead.
+func (*RegisterResponse) Descriptor() ([]byte, []int) {
+	return file_car_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RegisterResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *RegisterResponse) GetAuthToken() string {
+	if x != nil {
+		return x.AuthToken
+	}
+	return ""
+}
+
+func (x *RegisterResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 var File_car_proto protoreflect.FileDescriptor
 
 const file_car_proto_rawDesc = "" +
@@ -504,7 +832,23 @@ const file_car_proto_rawDesc = "" +
 	"\x04team\x18\x02 \x01(\tR\x04team\x12\x14\n" +
 	"\x05power\x18\x03 \x01(\x02R\x05power\x12\x14\n" +
 	"\x05color\x18\x04 \x01(\tR\x05color\x12\x16\n" +
-	"\x06driver\x18\x05 \x01(\tR\x06driver\"\x9d\x01\n" +
+	"\x06driver\x18\x05 \x01(\tR\x06driver\"\xe1\x01\n" +
+	"\vPlayerInput\x12\x15\n" +
+	"\x06car_id\x18\x01 \x01(\tR\x05carId\x12\x1d\n" +
+	"\n" +
+	"auth_token\x18\x02 \x01(\tR\tauthToken\x12\x1a\n" +
+	"\bsteering\x18\x03 \x01(\x02R\bsteering\x12\x1a\n" +
+	"\bthrottle\x18\x04 \x01(\x02R\bthrottle\x12\x14\n" +
+	"\x05brake\x18\x05 \x01(\x02R\x05brake\x12\x14\n" +
+	"\x05boost\x18\x06 \x01(\bR\x05boost\x12\x1c\n" +
+	"\ttimestamp\x18\a \x01(\x03R\ttimestamp\x12\x1a\n" +
+	"\bsequence\x18\b \x01(\x05R\bsequence\"|\n" +
+	"\bInputAck\x12\x1a\n" +
+	"\baccepted\x18\x01 \x01(\bR\baccepted\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x1f\n" +
+	"\vserver_time\x18\x03 \x01(\x03R\n" +
+	"serverTime\x12\x1b\n" +
+	"\tgame_tick\x18\x04 \x01(\x03R\bgameTick\"\xf3\x01\n" +
 	"\bCarState\x12\x15\n" +
 	"\x06car_id\x18\x01 \x01(\tR\x05carId\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x02R\x01x\x12\f\n" +
@@ -512,7 +856,9 @@ const file_car_proto_rawDesc = "" +
 	"\aheading\x18\x04 \x01(\x02R\aheading\x12\x14\n" +
 	"\x05speed\x18\x05 \x01(\x02R\x05speed\x12\x10\n" +
 	"\x03lap\x18\x06 \x01(\x05R\x03lap\x12\x1c\n" +
-	"\ttimestamp\x18\a \x01(\x03R\ttimestamp\"\x84\x01\n" +
+	"\ttimestamp\x18\a \x01(\x03R\ttimestamp\x12)\n" +
+	"\x10current_steering\x18\b \x01(\x02R\x0fcurrentSteering\x12)\n" +
+	"\x10current_throttle\x18\t \x01(\x02R\x0fcurrentThrottle\"\x84\x01\n" +
 	"\n" +
 	"RaceStatus\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x1d\n" +
@@ -522,21 +868,33 @@ const file_car_proto_rawDesc = "" +
 	"\rleader_car_id\x18\x04 \x01(\tR\vleaderCarId\"I\n" +
 	"\aCheckIn\x12 \n" +
 	"\x04cars\x18\x01 \x03(\v2\f.car.CarInfoR\x04cars\x12\x1c\n" +
-	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\"}\n" +
+	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\"\x9a\x01\n" +
 	"\bRaceData\x120\n" +
 	"\vrace_status\x18\x01 \x01(\v2\x0f.car.RaceStatusR\n" +
 	"raceStatus\x12!\n" +
 	"\x04cars\x18\x02 \x03(\v2\r.car.CarStateR\x04cars\x12\x1c\n" +
-	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\"o\n" +
+	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x12\x1b\n" +
+	"\tgame_tick\x18\x04 \x01(\x03R\bgameTick\"o\n" +
 	"\n" +
 	"RaceUpdate\x12)\n" +
 	"\bcheck_in\x18\x01 \x01(\v2\f.car.CheckInH\x00R\acheckIn\x12,\n" +
 	"\trace_data\x18\x02 \x01(\v2\r.car.RaceDataH\x00R\braceDataB\b\n" +
-	"\x06update2@\n" +
+	"\x06update\"d\n" +
+	"\x0eRegisterPlayer\x12\x15\n" +
+	"\x06car_id\x18\x01 \x01(\tR\x05carId\x12\x1f\n" +
+	"\vplayer_name\x18\x02 \x01(\tR\n" +
+	"playerName\x12\x1a\n" +
+	"\bpassword\x18\x03 \x01(\tR\bpassword\"e\n" +
+	"\x10RegisterResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1d\n" +
+	"\n" +
+	"auth_token\x18\x02 \x01(\tR\tauthToken\x12\x18\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage2t\n" +
 	"\n" +
 	"CarService\x122\n" +
 	"\x11StreamRaceUpdates\x12\n" +
-	".car.Empty\x1a\x0f.car.RaceUpdate0\x01B\tZ\a./protob\x06proto3"
+	".car.Empty\x1a\x0f.car.RaceUpdate0\x01\x122\n" +
+	"\x0fSendPlayerInput\x12\x10.car.PlayerInput\x1a\r.car.InputAckB\tZ\a./protob\x06proto3"
 
 var (
 	file_car_proto_rawDescOnce sync.Once
@@ -550,26 +908,32 @@ func file_car_proto_rawDescGZIP() []byte {
 	return file_car_proto_rawDescData
 }
 
-var file_car_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_car_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_car_proto_goTypes = []any{
-	(*Empty)(nil),      // 0: car.Empty
-	(*CarInfo)(nil),    // 1: car.CarInfo
-	(*CarState)(nil),   // 2: car.CarState
-	(*RaceStatus)(nil), // 3: car.RaceStatus
-	(*CheckIn)(nil),    // 4: car.CheckIn
-	(*RaceData)(nil),   // 5: car.RaceData
-	(*RaceUpdate)(nil), // 6: car.RaceUpdate
+	(*Empty)(nil),            // 0: car.Empty
+	(*CarInfo)(nil),          // 1: car.CarInfo
+	(*PlayerInput)(nil),      // 2: car.PlayerInput
+	(*InputAck)(nil),         // 3: car.InputAck
+	(*CarState)(nil),         // 4: car.CarState
+	(*RaceStatus)(nil),       // 5: car.RaceStatus
+	(*CheckIn)(nil),          // 6: car.CheckIn
+	(*RaceData)(nil),         // 7: car.RaceData
+	(*RaceUpdate)(nil),       // 8: car.RaceUpdate
+	(*RegisterPlayer)(nil),   // 9: car.RegisterPlayer
+	(*RegisterResponse)(nil), // 10: car.RegisterResponse
 }
 var file_car_proto_depIdxs = []int32{
 	1, // 0: car.CheckIn.cars:type_name -> car.CarInfo
-	3, // 1: car.RaceData.race_status:type_name -> car.RaceStatus
-	2, // 2: car.RaceData.cars:type_name -> car.CarState
-	4, // 3: car.RaceUpdate.check_in:type_name -> car.CheckIn
-	5, // 4: car.RaceUpdate.race_data:type_name -> car.RaceData
+	5, // 1: car.RaceData.race_status:type_name -> car.RaceStatus
+	4, // 2: car.RaceData.cars:type_name -> car.CarState
+	6, // 3: car.RaceUpdate.check_in:type_name -> car.CheckIn
+	7, // 4: car.RaceUpdate.race_data:type_name -> car.RaceData
 	0, // 5: car.CarService.StreamRaceUpdates:input_type -> car.Empty
-	6, // 6: car.CarService.StreamRaceUpdates:output_type -> car.RaceUpdate
-	6, // [6:7] is the sub-list for method output_type
-	5, // [5:6] is the sub-list for method input_type
+	2, // 6: car.CarService.SendPlayerInput:input_type -> car.PlayerInput
+	8, // 7: car.CarService.StreamRaceUpdates:output_type -> car.RaceUpdate
+	3, // 8: car.CarService.SendPlayerInput:output_type -> car.InputAck
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
 	5, // [5:5] is the sub-list for extension type_name
 	5, // [5:5] is the sub-list for extension extendee
 	0, // [0:5] is the sub-list for field type_name
@@ -580,7 +944,7 @@ func file_car_proto_init() {
 	if File_car_proto != nil {
 		return
 	}
-	file_car_proto_msgTypes[6].OneofWrappers = []any{
+	file_car_proto_msgTypes[8].OneofWrappers = []any{
 		(*RaceUpdate_CheckIn)(nil),
 		(*RaceUpdate_RaceData)(nil),
 	}
@@ -590,7 +954,7 @@ func file_car_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_car_proto_rawDesc), len(file_car_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
