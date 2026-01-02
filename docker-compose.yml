@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  grpc-server:
+  server:
     build:
       context: ./server
       dockerfile: Dockerfile
@@ -9,7 +9,16 @@ services:
       - "50051:50051"
     networks:
       - racing-net
-
+  gocar:
+    build:
+      context: ./gocar
+      dockerfile: Dockerfile
+    environment:
+      - SERVER_ADDR=server:50051
+    depends_on:
+      - server     
+    networks:
+      - racing-net
   envoy:
     image: envoyproxy/envoy:v1.28-latest
     ports:
@@ -18,29 +27,29 @@ services:
       - ./envoy.yml:/etc/envoy/envoy.yml
     command: /usr/local/bin/envoy -c /etc/envoy/envoy.yml
     depends_on:
-      - grpc-server
+      - server
     networks:
       - racing-net
 
-  web-client:
+  observer:
     build:
-      context: ./client
+      context: ./observer
       dockerfile: Dockerfile
     ports:
       - "8080:80"
     depends_on:
-      - grpc-server
+      - server
       - envoy
     networks:
       - racing-net
-  web-player:
+  human-player:
     build:
       context: ./humanplayer
       dockerfile: Dockerfile
     ports:
       - "9090:80"
     depends_on:
-      - grpc-server
+      - server
       - envoy
     networks:
       - racing-net
