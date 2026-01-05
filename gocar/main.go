@@ -15,8 +15,9 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+var carId string
+
 const (
-	carId           = "C"
 	authToken       = "demo-token-C"
 	inputRate       = time.Second / 60 // 60 updates per second
 	lookAheadPoints = 8                // how many centerline points to look ahead
@@ -151,7 +152,7 @@ func (c *CarClient) sendInput(ctx context.Context, steering, throttle, brake flo
 
 	input := &pb.PlayerInput{
 		CarId:     carId,
-		AuthToken: authToken,
+		AuthToken: getAuthToken(carId),
 		Steering:  steering,
 		Throttle:  throttle,
 		Brake:     brake,
@@ -248,12 +249,12 @@ func max(a, b float32) float32 {
 }
 
 func main() {
+	carId = getCarLetter()
 	client, err := NewCarClient()
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
 	defer client.Close()
-
 	ctx := context.Background()
 
 	// Load track geometry first
@@ -289,4 +290,17 @@ func main() {
 			}
 		}
 	}
+}
+func getAuthToken(carId string) string {
+	return "demo-token-" + carId
+}
+
+func getCarLetter() string {
+	letter := os.Getenv("CAR_LETTER")
+	if letter == "" {
+		log.Fatal("CAR_LETTER environment variable is not set")
+	}
+
+	log.Printf("car letter: %s", letter)
+	return letter
 }

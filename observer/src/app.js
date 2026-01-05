@@ -1,69 +1,35 @@
 const { Empty, RegisterPlayer } = require('../proto/car_pb.js');
 const { CarServiceClient } = require('../proto/car_grpc_web_pb.js');
 
-const status = document.getElementById('status');
-const updates = document.getElementById('updates');
-const errorEl = document.getElementById('error');
-const raceInfo = document.getElementById('race-info');
+const statusEl     = document.getElementById('status');
+const updatesEl    = document.getElementById('updates');
+const errorEl      = document.getElementById('error');
+const raceInfoEl   = document.getElementById('race-info');
 const carsContainer = document.getElementById('cars-container');
-const trackCanvas = document.getElementById('track-canvas');
+const carInfoList  = document.getElementById('car-info-list');
+const trackCanvas  = document.getElementById('track-canvas');
 
 let updateCount = 0;
-let carInfoMap = {};
-let trackInfo = null;
+let carStates   = new Map();   // carId → latest CarState
+let trackInfo   = null;
+let scale       = 1;
+let offsetX     = 0;
+let offsetY     = 0;
 
 const client = new CarServiceClient('http://localhost:8081', null, null);
 
-console.log('Connecting to gRPC server via Envoy proxy');
+console.log('Web observer starting...');
 
 /* ---------------------------------------------------
-   TRACK POINT DEBUG
+   TRANSFORM HELPERS (world → screen pixels)
 --------------------------------------------------- */
-function printTrackPoints(track) {
-    console.log('Track object:', track.toObject());
-}
+function computeTransform() {
+    if (!trackInfo) return;
 
-/* ---------------------------------------------------
-   INIT
---------------------------------------------------- */
-function initialize() {
-    status.textContent = 'Checking in...';
-
-    const req = new RegisterPlayer();
-    req.setCarId('OBSERVER');
-    req.setPlayerName('Web Observer');
-    req.setPassword('spectator');
-
-    const checkIn = client.checkIn || client.CheckIn;
-    checkIn.call(client, req, {}, (err, res) => {
-        if (err || !res.getAccepted()) {
-            errorEl.textContent = err?.message || res.getMessage();
-            return;
-        }
-
-        if (res.hasTrack()) {
-            trackInfo = res.getTrack();
-            printTrackPoints(trackInfo);
-            drawTrackPoints(trackInfo);
-        }
-
-        startRaceStream();
-        status.textContent = 'Connected';
-    });
-}
-
-/* ---------------------------------------------------
-   DRAW ALL TRACK POINTS
---------------------------------------------------- */
-function drawTrackPoints(track) {
-    if (!trackCanvas) return;
-    const ctx = trackCanvas.getContext('2d');
-
-    const left = track.getLeftBoundaryList();
-    const right = track.getRightBoundaryList();
+    const left  = trackInfo.getLeftBoundaryList() || [];
+    const right = trackInfo.getRightBoundaryList() || [];
     if (!left.length || !right.length) return;
 
-    // ---------- 1. Compute world bounds ----------
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
 
@@ -74,78 +40,214 @@ function drawTrackPoints(track) {
         maxY = Math.max(maxY, p.getY());
     });
 
-    const worldWidth = maxX - minX;
-    const worldHeight = maxY - minY;
-
-    // ---------- 2. Scale & center ----------
     const padding = 40;
-    const scale = Math.min(
-        (trackCanvas.width - padding * 2) / worldWidth,
-        (trackCanvas.height - padding * 2) / worldHeight
+    const w = trackCanvas.width  || 1100;
+    const h = trackCanvas.height || 500;
+
+    scale = Math.min(
+        (w - padding * 2) / (maxX - minX || 1),
+        (h - padding * 2) / (maxY - minY || 1)
     );
 
-    const offsetX = padding - minX * scale;
-    const offsetY = padding - minY * scale;
+    offsetX = padding - minX * scale;
+    offsetY = padding - minY * scale;
+}
 
-    const toCanvas = (p) => ({
-        x: p.getX() * scale + offsetX,
-        y: p.getY() * scale + offsetY
-    });
-
-    
-
-    // ---------- 4. Draw circuit surface ----------
-    ctx.fillStyle = '#777'; // asphalt grey
-    ctx.beginPath();
-
-    // Left boundary (forward)
-    left.forEach((p, i) => {
-        const { x, y } = toCanvas(p);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-
-    // Right boundary (reverse)
-    for (let i = right.length - 1; i >= 0; i--) {
-        const { x, y } = toCanvas(right[i]);
-        ctx.lineTo(x, y);
-    }
-
-    ctx.closePath();
-    ctx.fill();
-
-    // ---------- 5. Optional: boundary outlines ----------
-    ctx.lineWidth = 1;
-
-    ctx.strokeStyle = '#ff4444'; // left
-    ctx.beginPath();
-    left.forEach((p, i) => {
-        const { x, y } = toCanvas(p);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    ctx.strokeStyle = '#4488ff'; // right
-    ctx.beginPath();
-    right.forEach((p, i) => {
-        const { x, y } = toCanvas(p);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    console.log(
-        `Track rendered: left=${left.length}, right=${right.length}`
-    );
+function worldToScreen(x, y) {
+    return {
+        left: (x * scale + offsetX) + 'px',
+        top:  (y * scale + offsetY) + 'px'
+    };
 }
 
 /* ---------------------------------------------------
-   STREAM
+   DRAW TRACK ON CANVAS (background)
 --------------------------------------------------- */
-function startRaceStream() {
-    const req = new Empty();
-    const stream = client.streamRaceUpdates.call(client, req, {});
+function drawTrack() {
+    if (!trackCanvas || !trackInfo) return;
+    const ctx = trackCanvas.getContext('2d');
+    ctx.clearRect(0, 0, trackCanvas.width, trackCanvas.height);
 
-    stream.on('data', () => {
-        updates.textContent = ++updateCount;
+    const left  = trackInfo.getLeftBoundaryList() || [];
+    const right = trackInfo.getRightBoundaryList() || [];
+
+    if (!left.length || !right.length) return;
+
+    // Asphalt
+    ctx.fillStyle = '#444';
+    ctx.beginPath();
+    left.forEach((p, i) => {
+        const { left: lx, top: ly } = worldToScreen(p.getX(), p.getY());
+        const x = parseFloat(lx), y = parseFloat(ly);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    for (let i = right.length - 1; i >= 0; i--) {
+        const { left: lx, top: ly } = worldToScreen(right[i].getX(), right[i].getY());
+        ctx.lineTo(parseFloat(lx), parseFloat(ly));
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Left boundary (red)
+    ctx.strokeStyle = '#ff5555';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    left.forEach((p, i) => {
+        const { left: lx, top: ly } = worldToScreen(p.getX(), p.getY());
+        const x = parseFloat(lx), y = parseFloat(ly);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Right boundary (blue)
+    ctx.strokeStyle = '#5555ff';
+    ctx.beginPath();
+    right.forEach((p, i) => {
+        const { left: lx, top: ly } = worldToScreen(p.getX(), p.getY());
+        const x = parseFloat(lx), y = parseFloat(ly);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+}
+
+/* ---------------------------------------------------
+   UPDATE / CREATE CAR DOM ELEMENTS
+--------------------------------------------------- */
+function updateCarsDisplay() {
+    carStates.forEach((state, carId) => {
+        let el = document.getElementById(`car-${carId}`);
+
+        if (!el) {
+            el = document.createElement('div');
+            el.id = `car-${carId}`;
+            el.className = 'car';
+            el.style.backgroundColor = getCarColor(carId);
+            el.innerHTML = carId;
+            carsContainer.appendChild(el);
+        }
+
+        const pos = state.getPosition();
+        if (!pos) return;
+
+        const { left, top } = worldToScreen(pos.getX(), pos.getY());
+        const heading = state.getHeading() || 0;
+
+        el.style.left = left;
+        el.style.top  = top;
+        el.style.transform = `rotate(${heading}deg)`;
+        el.title = `Speed: ${state.getSpeed()?.toFixed(1) || '?'} u/s\nLap: ${state.getLap() || '-'}`;
+    });
+
+    updateSidebarInfo();
+}
+
+/* ---------------------------------------------------
+   SIMPLE CAR COLOR BY ID
+--------------------------------------------------- */
+function getCarColor(carId) {
+    const palette = {
+        'A': '#e63946', 'B': '#2a9d8f', 'C': '#457b9d',
+        'D': '#f4a261', 'E': '#8338ec', 'F': '#ffbe0b',
+    };
+    return palette[carId] || '#6c757d';
+}
+
+/* ---------------------------------------------------
+   UPDATE SIDEBAR WITH LATEST CAR INFO
+--------------------------------------------------- */
+function updateSidebarInfo() {
+    carInfoList.innerHTML = '';
+
+    carStates.forEach((state, carId) => {
+        const div = document.createElement('div');
+        div.className = 'car-info';
+        div.style.borderLeft = `6px solid ${getCarColor(carId)}`;
+
+        const pos = state.getPosition() || { getX: () => '?', getY: () => '?' };
+
+        div.innerHTML = `
+            <strong>Car ${carId}</strong>
+            Position: (${pos.getX()?.toFixed(1) || '?'} , ${pos.getY()?.toFixed(1) || '?'})<br>
+            Speed: ${state.getSpeed()?.toFixed(1) || '?'} u/s<br>
+            Heading: ${state.getHeading()?.toFixed(0) || '?'}°<br>
+            Lap: ${state.getLap() || '-'}
+        `;
+
+        carInfoList.appendChild(div);
+    });
+
+    if (carStates.size === 0) {
+        carInfoList.innerHTML = '<p style="text-align:center;color:#666;">Waiting for cars...</p>';
+    }
+}
+
+/* ---------------------------------------------------
+   CHECK-IN & GET TRACK
+--------------------------------------------------- */
+function initialize() {
+    statusEl.textContent = 'Connecting...';
+    statusEl.className = 'disconnected';
+
+    const req = new RegisterPlayer();
+    req.setCarId('OBSERVER');
+    req.setPlayerName('Web Tracker');
+    req.setPassword('spectator');
+
+    client.checkIn(req, {}, (err, res) => {
+        if (err || !res.getAccepted()) {
+            errorEl.textContent = err?.message || res?.getMessage() || 'Check-in failed';
+            statusEl.textContent = 'Failed';
+            return;
+        }
+
+        statusEl.textContent = 'Connected';
+        statusEl.className = 'connected';
+
+        if (res.hasTrack()) {
+            trackInfo = res.getTrack();
+            computeTransform();
+            drawTrack();
+        }
+
+        startStream();
+    });
+}
+
+/* ---------------------------------------------------
+   RACE STREAM
+--------------------------------------------------- */
+function startStream() {
+    const stream = client.streamRaceUpdates(new Empty(), {});
+
+    stream.on('data', (raceUpdate) => {
+        updateCount++;
+        updatesEl.textContent = updateCount;
+
+        const cars = raceUpdate.getCarsList() || [];
+        if (cars.length === 0) return;
+
+        // Update latest state for each car
+        cars.forEach(car => {
+            carStates.set(car.getCarId(), car);
+        });
+
+        // Update UI
+        updateCarsDisplay();
+
+        // Optional: show race status
+        const status = raceUpdate.getRaceStatus();
+        if (status) {
+            raceInfoEl.textContent = `Status: ${status.getStatus() || '?'} • Laps: ${status.getTotalLaps() || '?'} • Time: ${(status.getRaceTime()/1000).toFixed(1)}s`;
+        }
+    });
+
+    stream.on('error', err => {
+        console.error('Stream error:', err);
+        errorEl.textContent = 'Stream error: ' + (err.message || 'unknown');
+    });
+
+    stream.on('end', () => {
+        console.log('Stream ended');
     });
 }
 

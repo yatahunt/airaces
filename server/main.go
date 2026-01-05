@@ -243,6 +243,14 @@ func NewCarServer() *CarServer {
 	return s
 }
 
+// GetTrack RPC - returns track information without authentication
+func (s *CarServer) GetTrack(ctx context.Context, req *pb.Empty) (*pb.TrackInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.track, nil
+}
+
 // CheckIn RPC - handles player registration and returns static data
 func (s *CarServer) CheckIn(ctx context.Context, req *pb.RegisterPlayer) (*pb.CheckInResponse, error) {
 	carId := req.GetCarId()

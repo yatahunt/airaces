@@ -9,18 +9,62 @@ services:
       - "50051:50051"
     networks:
       - racing-net
-  gocar:
+  gocar-c:
     build:
       context: ./gocar
       dockerfile: Dockerfile
     environment:
-      - SERVER_ADDR=server:50051
+      - SERVER_ADDR=server:50051 
+      - CAR_LETTER=C
     depends_on:
       - server     
     networks:
-      - racing-net
-    deploy:
-      replicas: 1
+      - racing-net 
+
+  gocar-a: 
+    environment:
+      - SERVER_ADDR=server:50051 
+      - CAR_LETTER=A
+    build:
+      context: ./gocar
+      dockerfile: Dockerfile 
+    depends_on:
+      - server     
+    networks:
+      - racing-net       
+  gocar-b:
+    build:
+      context: ./gocar
+      dockerfile: Dockerfile
+    environment:
+      - SERVER_ADDR=server:50051 
+      - CAR_LETTER=B
+    depends_on:
+      - server     
+    networks:
+      - racing-net   
+  gocar-d:
+    build:
+      context: ./gocar
+      dockerfile: Dockerfile
+    environment:
+      - SERVER_ADDR=server:50051 
+      - CAR_LETTER=D
+    depends_on:
+      - server     
+    networks:
+      - racing-net   
+  gocar-e:
+    build:
+      context: ./gocar
+      dockerfile: Dockerfile
+    environment:
+      - SERVER_ADDR=server:50051 
+      - CAR_LETTER=E
+    depends_on:
+      - server     
+    networks:
+      - racing-net         
   envoy:
     image: envoyproxy/envoy:v1.28-latest
     ports:
