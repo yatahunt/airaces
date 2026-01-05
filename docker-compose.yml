@@ -19,6 +19,8 @@ services:
       - server     
     networks:
       - racing-net
+    deploy:
+      replicas: 1
   envoy:
     image: envoyproxy/envoy:v1.28-latest
     ports:
@@ -37,22 +39,23 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:80"
-    depends_on:
-      - server
+    depends_on: 
       - envoy
     networks:
       - racing-net
-  human-player:
-    build:
-      context: ./humanplayer
-      dockerfile: Dockerfile
-    ports:
-      - "9090:80"
-    depends_on:
-      - server
-      - envoy
-    networks:
-      - racing-net
+  # human-player:
+  #   build:
+  #     context: ./humanplayer
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "9090:80"
+  #   depends_on:
+  #     - server
+  #     - envoy
+  #   networks:
+  #     - racing-net
+  #   deploy:
+  #     replicas: 0  
 networks:
   racing-net:
     driver: bridge

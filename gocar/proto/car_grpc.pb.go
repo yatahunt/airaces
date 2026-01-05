@@ -19,6 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	CarService_CheckIn_FullMethodName           = "/car.CarService/CheckIn"
+	CarService_GetTrack_FullMethodName          = "/car.CarService/GetTrack"
 	CarService_StreamRaceUpdates_FullMethodName = "/car.CarService/StreamRaceUpdates"
 	CarService_SendPlayerInput_FullMethodName   = "/car.CarService/SendPlayerInput"
 )
@@ -27,6 +29,10 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CarServiceClient interface {
+	// Client checks in and receives static data (cars, track)
+	CheckIn(ctx context.Context, in *RegisterPlayer, opts ...grpc.CallOption) (*CheckInResponse, error)
+	// Get track info only (no authentication needed)
+	GetTrack(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*TrackInfo, error)
 	// Stream race updates to all clients (spectators + players)
 	StreamRaceUpdates(ctx context.Context, in *Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RaceUpdate], error)
 	// Players send input via unary request-response (grpc-web safe)
@@ -39,6 +45,26 @@ type carServiceClient struct {
 
 func NewCarServiceClient(cc grpc.ClientConnInterface) CarServiceClient {
 	return &carServiceClient{cc}
+}
+
+func (c *carServiceClient) CheckIn(ctx context.Context, in *RegisterPlayer, opts ...grpc.CallOption) (*CheckInResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckInResponse)
+	err := c.cc.Invoke(ctx, CarService_CheckIn_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *carServiceClient) GetTrack(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*TrackInfo, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TrackInfo)
+	err := c.cc.Invoke(ctx, CarService_GetTrack_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *carServiceClient) StreamRaceUpdates(ctx context.Context, in *Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RaceUpdate], error) {
@@ -74,6 +100,10 @@ func (c *carServiceClient) SendPlayerInput(ctx context.Context, in *PlayerInput,
 // All implementations must embed UnimplementedCarServiceServer
 // for forward compatibility.
 type CarServiceServer interface {
+	// Client checks in and receives static data (cars, track)
+	CheckIn(context.Context, *RegisterPlayer) (*CheckInResponse, error)
+	// Get track info only (no authentication needed)
+	GetTrack(context.Context, *Empty) (*TrackInfo, error)
 	// Stream race updates to all clients (spectators + players)
 	StreamRaceUpdates(*Empty, grpc.ServerStreamingServer[RaceUpdate]) error
 	// Players send input via unary request-response (grpc-web safe)
@@ -88,6 +118,12 @@ type CarServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedCarServiceServer struct{}
 
+func (UnimplementedCarServiceServer) CheckIn(context.Context, *RegisterPlayer) (*CheckInResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckIn not implemented")
+}
+func (UnimplementedCarServiceServer) GetTrack(context.Context, *Empty) (*TrackInfo, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTrack not implemented")
+}
 func (UnimplementedCarServiceServer) StreamRaceUpdates(*Empty, grpc.ServerStreamingServer[RaceUpdate]) error {
 	return status.Error(codes.Unimplemented, "method StreamRaceUpdates not implemented")
 }
@@ -113,6 +149,42 @@ func RegisterCarServiceServer(s grpc.ServiceRegistrar, srv CarServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&CarService_ServiceDesc, srv)
+}
+
+func _CarService_CheckIn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterPlayer)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CarServiceServer).CheckIn(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CarService_CheckIn_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CarServiceServer).CheckIn(ctx, req.(*RegisterPlayer))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CarService_GetTrack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CarServiceServer).GetTrack(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CarService_GetTrack_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CarServiceServer).GetTrack(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _CarService_StreamRaceUpdates_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -151,6 +223,14 @@ var CarService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "car.CarService",
 	HandlerType: (*CarServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CheckIn",
+			Handler:    _CarService_CheckIn_Handler,
+		},
+		{
+			MethodName: "GetTrack",
+			Handler:    _CarService_GetTrack_Handler,
+		},
 		{
 			MethodName: "SendPlayerInput",
 			Handler:    _CarService_SendPlayerInput_Handler,

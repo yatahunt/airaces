@@ -6,6 +6,12 @@ package car;
 option go_package = "./proto";
 
 service CarService {
+  // Client checks in and receives static data (cars, track)
+  rpc CheckIn(RegisterPlayer) returns (CheckInResponse);
+  
+  // Get track info only (no authentication needed)
+  rpc GetTrack(Empty) returns (TrackInfo);
+  
   // Stream race updates to all clients (spectators + players)
   rpc StreamRaceUpdates(Empty) returns (stream RaceUpdate);
 
@@ -18,7 +24,24 @@ service CarService {
 message Empty {}
 
 // ---------------------------------------------------
-// Static car information - sent once at check-in
+// 3D point for track boundaries (32-bit floats)
+message Point3D {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+}
+
+// ---------------------------------------------------
+// Track information - two boundary lines
+message TrackInfo {
+  string track_id = 1;
+  string name = 2;
+  repeated Point3D left_boundary = 3; // Left edge of track
+  repeated Point3D right_boundary = 4; // Right edge of track
+}
+
+// ---------------------------------------------------
+// Static car information
 message CarInfo {
   string car_id = 1;
   string team = 2;
@@ -28,92 +51,72 @@ message CarInfo {
 }
 
 // ---------------------------------------------------
-// Player input controls - sent continuously by clients
-message PlayerInput {
+// Player registration request
+message RegisterPlayer {
   string car_id = 1;
-  string auth_token = 2; // Secret token to authenticate the player
-
-  // Control inputs (normalized -1.0 to 1.0 or 0.0 to 1.0)
-  float steering = 3; // -1.0 (full left) to 1.0 (full right)
-  float throttle = 4; // 0.0 to 1.0 (acceleration)
-  float brake = 5; // 0.0 to 1.0 (braking force)
-  bool boost = 6; // Boost/nitro button (optional)
-
-  int64 timestamp = 7; // Client send time in ms
-  int32 sequence = 8; // Incrementing sequence number
+  string player_name = 2;
+  string password = 3;
 }
 
 // ---------------------------------------------------
-// Server response to PlayerInput
-message InputAck {
-  bool accepted = 1; // True if input was accepted
-  string reason = 2; // If rejected, reason (auth, race state, etc.)
+// CheckIn response with ack, static data, and auth token
+message CheckInResponse {
+  bool accepted = 1;
+  string auth_token = 2; // Token to use in PlayerInput (empty for spectators)
+  string message = 3; // Error or success message
+  bool is_spectator = 4; // True if logged in as spectator
+  
+  repeated CarInfo cars = 5; // All cars in race
+  TrackInfo track = 6; // Track boundaries
+}
 
-  int64 server_time = 3; // Server unix timestamp in ms
-  int64 game_tick = 4; // Game loop tick number when input was processed
+// ---------------------------------------------------
+// Player input controls
+message PlayerInput {
+  string car_id = 1;
+  string auth_token = 2;
+
+  float steering = 3; // -1.0 to 1.0
+  float throttle = 4; // 0.0 to 1.0
+  float brake = 5; // 0.0 to 1.0
+  bool boost = 6;
+
+  int32 timestamp = 7;
+}
+
+// ---------------------------------------------------
+// Input acknowledgment
+message InputAck {
+  bool accepted = 1;
+  string reason = 2;
+  int32 game_loop = 3;
 }
 
 // ---------------------------------------------------
 // Dynamic car state during race
 message CarState {
   string car_id = 1;
-  float x = 2;
-  float y = 3;
-  float heading = 4; // Direction in degrees (0-360)
-  float speed = 5; // Current speed
-  int32 lap = 6; // Current lap number
-  int64 timestamp = 7;
-
-  // Optional: show last input for debugging/spectating
-  float current_steering = 8;
-  float current_throttle = 9;
+  Point3D position = 2;
+  float heading = 3;
+  float speed = 4;
+  int32 lap = 5;
+  
+  float current_steering = 6;
+  float current_throttle = 7;
 }
 
 // ---------------------------------------------------
 // Race status information
 message RaceStatus {
   string status = 1; // "waiting", "racing", "finished"
-  int32 total_laps = 2; // Total laps in race
-  int64 race_time = 3; // Elapsed time in milliseconds
-  string leader_car_id = 4; // Current race leader
+  int32 total_laps = 2;
+  int32 race_time = 3;
 }
 
 // ---------------------------------------------------
-// Check-in message with all static car information
-message CheckIn {
-  repeated CarInfo cars = 1;
-  int64 timestamp = 2;
-}
-
-// ---------------------------------------------------
-// Race update message with status and all car positions
-message RaceData {
+// Race update (streamed continuously)
+message RaceUpdate {
   RaceStatus race_status = 1;
   repeated CarState cars = 2;
-  int64 timestamp = 3;
-
-  int64 game_tick = 4; // Added for lag tracking/debugging
-}
-
-// ---------------------------------------------------
-// Union message for streaming different types
-message RaceUpdate {
-  oneof update {
-    CheckIn check_in = 1; // Sent once at connection start
-    RaceData race_data = 2; // Sent continuously during race
-  }
-}
-
-// ---------------------------------------------------
-// Optional: Registration/authentication message
-message RegisterPlayer {
-  string car_id = 1;
-  string player_name = 2;
-  string password = 3; // Or use external auth service
-}
-
-message RegisterResponse {
-  bool success = 1;
-  string auth_token = 2; // Token to use in PlayerInput
-  string message = 3; // Error or success message
+  int32 game_tick = 3;
 }

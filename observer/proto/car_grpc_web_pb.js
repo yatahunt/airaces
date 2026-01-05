@@ -77,6 +77,128 @@ proto.car.CarServicePromiseClient =
 /**
  * @const
  * @type {!grpc.web.MethodDescriptor<
+ *   !proto.car.RegisterPlayer,
+ *   !proto.car.CheckInResponse>}
+ */
+const methodDescriptor_CarService_CheckIn = new grpc.web.MethodDescriptor(
+  '/car.CarService/CheckIn',
+  grpc.web.MethodType.UNARY,
+  proto.car.RegisterPlayer,
+  proto.car.CheckInResponse,
+  /**
+   * @param {!proto.car.RegisterPlayer} request
+   * @return {!Uint8Array}
+   */
+  function(request) {
+    return request.serializeBinary();
+  },
+  proto.car.CheckInResponse.deserializeBinary
+);
+
+
+/**
+ * @param {!proto.car.RegisterPlayer} request The
+ *     request proto
+ * @param {?Object<string, string>} metadata User defined
+ *     call metadata
+ * @param {function(?grpc.web.RpcError, ?proto.car.CheckInResponse)}
+ *     callback The callback function(error, response)
+ * @return {!grpc.web.ClientReadableStream<!proto.car.CheckInResponse>|undefined}
+ *     The XHR Node Readable Stream
+ */
+proto.car.CarServiceClient.prototype.checkIn =
+    function(request, metadata, callback) {
+  return this.client_.rpcCall(this.hostname_ +
+      '/car.CarService/CheckIn',
+      request,
+      metadata || {},
+      methodDescriptor_CarService_CheckIn,
+      callback);
+};
+
+
+/**
+ * @param {!proto.car.RegisterPlayer} request The
+ *     request proto
+ * @param {?Object<string, string>=} metadata User defined
+ *     call metadata
+ * @return {!Promise<!proto.car.CheckInResponse>}
+ *     Promise that resolves to the response
+ */
+proto.car.CarServicePromiseClient.prototype.checkIn =
+    function(request, metadata) {
+  return this.client_.unaryCall(this.hostname_ +
+      '/car.CarService/CheckIn',
+      request,
+      metadata || {},
+      methodDescriptor_CarService_CheckIn);
+};
+
+
+/**
+ * @const
+ * @type {!grpc.web.MethodDescriptor<
+ *   !proto.car.Empty,
+ *   !proto.car.TrackInfo>}
+ */
+const methodDescriptor_CarService_GetTrack = new grpc.web.MethodDescriptor(
+  '/car.CarService/GetTrack',
+  grpc.web.MethodType.UNARY,
+  proto.car.Empty,
+  proto.car.TrackInfo,
+  /**
+   * @param {!proto.car.Empty} request
+   * @return {!Uint8Array}
+   */
+  function(request) {
+    return request.serializeBinary();
+  },
+  proto.car.TrackInfo.deserializeBinary
+);
+
+
+/**
+ * @param {!proto.car.Empty} request The
+ *     request proto
+ * @param {?Object<string, string>} metadata User defined
+ *     call metadata
+ * @param {function(?grpc.web.RpcError, ?proto.car.TrackInfo)}
+ *     callback The callback function(error, response)
+ * @return {!grpc.web.ClientReadableStream<!proto.car.TrackInfo>|undefined}
+ *     The XHR Node Readable Stream
+ */
+proto.car.CarServiceClient.prototype.getTrack =
+    function(request, metadata, callback) {
+  return this.client_.rpcCall(this.hostname_ +
+      '/car.CarService/GetTrack',
+      request,
+      metadata || {},
+      methodDescriptor_CarService_GetTrack,
+      callback);
+};
+
+
+/**
+ * @param {!proto.car.Empty} request The
+ *     request proto
+ * @param {?Object<string, string>=} metadata User defined
+ *     call metadata
+ * @return {!Promise<!proto.car.TrackInfo>}
+ *     Promise that resolves to the response
+ */
+proto.car.CarServicePromiseClient.prototype.getTrack =
+    function(request, metadata) {
+  return this.client_.unaryCall(this.hostname_ +
+      '/car.CarService/GetTrack',
+      request,
+      metadata || {},
+      methodDescriptor_CarService_GetTrack);
+};
+
+
+/**
+ * @const
+ * @type {!grpc.web.MethodDescriptor<
  *   !proto.car.Empty,
  *   !proto.car.RaceUpdate>}
  */

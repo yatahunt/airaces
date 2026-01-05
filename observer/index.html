@@ -48,44 +48,14 @@
             width: 100%;
             height: 500px;
             background: linear-gradient(to bottom, 
-                #4a5568 0%, 
-                #2d3748 20%, 
-                #2d3748 40%,
-                #4a5568 50%,
-                #2d3748 60%,
-                #2d3748 80%,
-                #4a5568 100%
+                #48bb78,
+                #48bb78
+                
             );
             border-radius: 10px;
             overflow: hidden;
             border: 4px solid #1a202c;
-        }
-        .road-lines {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-        }
-        .road-line {
-            position: absolute;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: repeating-linear-gradient(
-                to right,
-                white 0px,
-                white 30px,
-                transparent 30px,
-                transparent 60px
-            );
-            opacity: 0.5;
-        }
-        .road-line:nth-child(1) { top: 20%; }
-        .road-line:nth-child(2) { top: 40%; }
-        .road-line:nth-child(3) { top: 60%; }
-        .road-line:nth-child(4) { top: 80%; }
-        
+        } 
         #cars-container {
             position: relative;
             width: 100%;
@@ -186,16 +156,26 @@
         <div id="race-info" class="race-info">
             Waiting for race data...
         </div>
-        
         <div class="track-container">
-            <div class="road-lines">
-                <div class="road-line"></div>
-                <div class="road-line"></div>
-                <div class="road-line"></div>
-                <div class="road-line"></div>
-            </div>
-            <div id="cars-container"></div>
-        </div>
+    <canvas id="track-canvas" width="1100" height="500"
+        style="
+            position:absolute;
+            top:0;
+            left:0;
+            z-index:1;
+        ">
+    </canvas>
+
+    <div class="road-lines" style="z-index:2; pointer-events:none;">
+        <div class="road-line"></div>
+        <div class="road-line"></div>
+        <div class="road-line"></div>
+        <div class="road-line"></div>
+    </div>
+
+    <div id="cars-container" style="z-index:3;"></div>
+</div>
+
         
         <div class="sidebar">
             <div id="car-info-list"></div>
