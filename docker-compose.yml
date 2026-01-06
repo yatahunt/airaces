@@ -9,62 +9,60 @@ services:
       - "50051:50051"
     networks:
       - racing-net
-  gocar-c:
+
+  gocar-a:
+    image: gocar:latest  # Reference the built image
     build:
       context: ./gocar
       dockerfile: Dockerfile
-    environment:
-      - SERVER_ADDR=server:50051 
-      - CAR_LETTER=C
-    depends_on:
-      - server     
-    networks:
-      - racing-net 
-
-  gocar-a: 
     environment:
       - SERVER_ADDR=server:50051 
       - CAR_LETTER=A
-    build:
-      context: ./gocar
-      dockerfile: Dockerfile 
     depends_on:
       - server     
     networks:
-      - racing-net       
+      - racing-net
+
   gocar-b:
-    build:
-      context: ./gocar
-      dockerfile: Dockerfile
+    image: gocar:latest  # Reuses the same image
     environment:
       - SERVER_ADDR=server:50051 
       - CAR_LETTER=B
     depends_on:
       - server     
     networks:
-      - racing-net   
+      - racing-net
+
+  gocar-c:
+    image: gocar:latest  # Reuses the same image
+    environment:
+      - SERVER_ADDR=server:50051 
+      - CAR_LETTER=C
+    depends_on:
+      - server     
+    networks:
+      - racing-net
+
   gocar-d:
-    build:
-      context: ./gocar
-      dockerfile: Dockerfile
+    image: gocar:latest  # Reuses the same image
     environment:
       - SERVER_ADDR=server:50051 
       - CAR_LETTER=D
     depends_on:
       - server     
     networks:
-      - racing-net   
+      - racing-net
+
   gocar-e:
-    build:
-      context: ./gocar
-      dockerfile: Dockerfile
+    image: gocar:latest  # Reuses the same image
     environment:
       - SERVER_ADDR=server:50051 
       - CAR_LETTER=E
     depends_on:
       - server     
     networks:
-      - racing-net         
+      - racing-net
+
   envoy:
     image: envoyproxy/envoy:v1.28-latest
     ports:
@@ -87,19 +85,7 @@ services:
       - envoy
     networks:
       - racing-net
-  # human-player:
-  #   build:
-  #     context: ./humanplayer
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "9090:80"
-  #   depends_on:
-  #     - server
-  #     - envoy
-  #   networks:
-  #     - racing-net
-  #   deploy:
-  #     replicas: 0  
+
 networks:
   racing-net:
     driver: bridge
