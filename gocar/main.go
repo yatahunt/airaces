@@ -18,7 +18,6 @@ import (
 var carId string
 
 const (
-	authToken       = "demo-token-C"
 	inputRate       = time.Second / 60 // 60 updates per second
 	lookAheadPoints = 8                // how many centerline points to look ahead
 	maxOffTrackDist = 40.0             // consider off-track if farther than this (tune)
@@ -38,6 +37,7 @@ type CarClient struct {
 	sequence   int32 // kept for local logging/debug, not sent
 	myCarState *pb.CarState
 	centerline []Point // computed centerline points
+	raceType   pb.RaceType
 }
 
 type Point struct {
@@ -65,19 +65,47 @@ func (c *CarClient) Close() {
 	}
 }
 
-// Fetch track boundaries and compute simple centerline
-func (c *CarClient) loadTrack(ctx context.Context) error {
-	track, err := c.client.GetTrack(ctx, &pb.Empty{})
+// CheckIn - register with the server
+func (c *CarClient) checkIn(ctx context.Context) error {
+	resp, err := c.client.CheckIn(ctx, &pb.RegisterPlayer{
+		CarId:      carId,
+		PlayerName: "AI Driver " + carId,
+		Password:   "", // Demo mode
+	})
 	if err != nil {
-		return fmt.Errorf("GetTrack failed: %v", err)
+		return fmt.Errorf("CheckIn failed: %v", err)
 	}
 
+	if !resp.Accepted {
+		return fmt.Errorf("registration rejected: %s", resp.Message)
+	}
+
+	log.Printf("✓ %s", resp.Message)
+	if resp.IsSpectator {
+		log.Printf("Logged in as spectator")
+	}
+
+	// Store race type
+	c.raceType = resp.Race
+	log.Printf("Race type: %s", c.raceType.String())
+
+	// Load track from check-in response
+	if resp.Track != nil {
+		c.loadTrackFromInfo(resp.Track)
+	}
+
+	return nil
+}
+
+// Load track from TrackInfo (either from CheckIn or GetTrack)
+func (c *CarClient) loadTrackFromInfo(track *pb.TrackInfo) {
 	log.Printf("Loaded track: %s (%s) — %d left / %d right points",
 		track.Name, track.TrackId,
 		len(track.LeftBoundary), len(track.RightBoundary))
 
 	if len(track.LeftBoundary) == 0 || len(track.RightBoundary) == 0 {
-		return fmt.Errorf("track has no boundary points")
+		log.Printf("Warning: track has no boundary points")
+		return
 	}
 
 	// Use the shorter length to avoid index-out-of-range
@@ -94,6 +122,16 @@ func (c *CarClient) loadTrack(ctx context.Context) error {
 	}
 
 	log.Printf("Centerline computed with %d points", len(c.centerline))
+}
+
+// Fetch track boundaries and compute simple centerline (alternative method)
+func (c *CarClient) loadTrack(ctx context.Context) error {
+	track, err := c.client.GetTrack(ctx, &pb.Empty{})
+	if err != nil {
+		return fmt.Errorf("GetTrack failed: %v", err)
+	}
+
+	c.loadTrackFromInfo(track)
 	return nil
 }
 
@@ -122,10 +160,21 @@ func (c *CarClient) handleUpdate(update *pb.RaceUpdate) {
 	for _, car := range update.Cars {
 		if car.CarId == carId {
 			c.myCarState = car
-			log.Printf("🏎️  %s | (%.1f, %.1f) | %.1f u/s | %.1f° | Lap %d",
-				car.CarId, car.Position.X, car.Position.Y,
+			statusStr := car.Status.String()
+			log.Printf("🏎️  %s [%s] | (%.1f, %.1f) | %.1f u/s | %.1f° | Lap %d",
+				car.CarId, statusStr, car.Position.X, car.Position.Y,
 				car.Speed, car.Heading, car.Lap)
 			break
+		}
+	}
+
+	// Log penalties if any
+	if len(update.Penalties) > 0 {
+		for _, penalty := range update.Penalties {
+			if penalty.CarId == carId {
+				log.Printf("⚠️  PENALTY: %s (remaining: %.1fs)",
+					penalty.Reason, float64(penalty.RemainingPenalty)/1000.0)
+			}
 		}
 	}
 
@@ -133,16 +182,13 @@ func (c *CarClient) handleUpdate(update *pb.RaceUpdate) {
 	if update.RaceStatus != nil {
 		st := update.RaceStatus
 		if st.Status == "finished" {
-			log.Printf("🏁 RACE FINISHED — time: %.2fs  (laps: %d)",
-				float64(st.RaceTime)/1000.0, st.TotalLaps)
-		} else if st.Status == "racing" {
-			log.Printf("Race ongoing — time: %.2fs  laps: %d",
-				float64(st.RaceTime)/1000.0, st.TotalLaps)
+			log.Printf("🏁 RACE FINISHED — tick: %d (laps: %d)",
+				st.GameTick, st.TotalLaps)
 		}
 	}
 }
 
-func (c *CarClient) sendInput(ctx context.Context, steering, throttle, brake float32, boost bool) error {
+func (c *CarClient) sendInput(ctx context.Context, steering, throttle, brake float32) error {
 	c.sequence++ // local counter only — not sent to server
 
 	ts := time.Now().UnixMilli()
@@ -156,7 +202,6 @@ func (c *CarClient) sendInput(ctx context.Context, steering, throttle, brake flo
 		Steering:  steering,
 		Throttle:  throttle,
 		Brake:     brake,
-		Boost:     boost,
 		Timestamp: int32(ts),
 	}
 
@@ -176,9 +221,14 @@ func (c *CarClient) sendInput(ctx context.Context, steering, throttle, brake flo
 // ────────────────────────────────────────────────
 // Basic centerline following (look-ahead steering)
 // ────────────────────────────────────────────────
-func (c *CarClient) getAIInput() (steering, throttle, brake float32, boost bool) {
+func (c *CarClient) getAIInput() (steering, throttle, brake float32) {
 	if c.myCarState == nil || len(c.centerline) == 0 {
-		return 0, 0.6, 0, false // safe fallback
+		return 0, 0.6, 0 // safe fallback
+	}
+
+	// Don't send input if serving penalty
+	if c.myCarState.Status == pb.CarStatus_SERVINGPENALTY {
+		return 0, 0, 1.0 // Full brake during penalty
 	}
 
 	pos := c.myCarState.Position
@@ -203,7 +253,6 @@ func (c *CarClient) getAIInput() (steering, throttle, brake float32, boost bool)
 
 	dx := target.X - float64(pos.X)
 	dy := target.Y - float64(pos.Y)
-	// distToTarget := math.Sqrt(dx*dx + dy*dy)  // removed since unused
 
 	// Desired heading in degrees
 	desiredHeading := math.Atan2(dy, dx) * 180 / math.Pi
@@ -218,7 +267,6 @@ func (c *CarClient) getAIInput() (steering, throttle, brake float32, boost bool)
 	// Throttle & brake logic
 	throttle = 0.9
 	brake = 0.0
-	boost = false
 
 	// Slow down when far off track or sharp correction needed
 	if minDist > maxOffTrackDist || math.Abs(angleError) > 65 {
@@ -226,12 +274,7 @@ func (c *CarClient) getAIInput() (steering, throttle, brake float32, boost bool)
 		brake = 0.3
 	}
 
-	// Conservative boost usage
-	if minDist < 15 && math.Abs(angleError) < 15 && throttle > 0.75 {
-		boost = true
-	}
-
-	return steering, throttle, brake, boost
+	return steering, throttle, brake
 }
 
 func min(a, b float32) float32 {
@@ -257,9 +300,9 @@ func main() {
 	defer client.Close()
 	ctx := context.Background()
 
-	// Load track geometry first
-	if err := client.loadTrack(ctx); err != nil {
-		log.Fatalf("Failed to load track: %v", err)
+	// Check in with server
+	if err := client.checkIn(ctx); err != nil {
+		log.Fatalf("Failed to check in: %v", err)
 	}
 
 	// Start background stream of race updates
@@ -283,14 +326,15 @@ func main() {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			steering, throttle, brake, boost := client.getAIInput()
+			steering, throttle, brake := client.getAIInput()
 
-			if err := client.sendInput(ctx, steering, throttle, brake, boost); err != nil {
+			if err := client.sendInput(ctx, steering, throttle, brake); err != nil {
 				log.Printf("Input error: %v", err)
 			}
 		}
 	}
 }
+
 func getAuthToken(carId string) string {
 	return "demo-token-" + carId
 }

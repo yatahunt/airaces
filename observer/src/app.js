@@ -8,9 +8,11 @@ const raceInfoEl   = document.getElementById('race-info');
 const carsContainer = document.getElementById('cars-container');
 const carInfoList  = document.getElementById('car-info-list');
 const trackCanvas  = document.getElementById('track-canvas');
+const penaltiesEl  = document.getElementById('penalties');
 
 let updateCount = 0;
-let carStates   = new Map();   // carId → latest CarState
+let carStates   = new Map();
+let carPenalties = new Map();
 let trackInfo   = null;
 let scale       = 1;
 let offsetX     = 0;
@@ -18,17 +20,45 @@ let offsetY     = 0;
 
 const client = new CarServiceClient('http://localhost:8081', null, null);
 
-console.log('Web observer starting...');
+console.log('=== WEB OBSERVER STARTING ===');
+console.log('Client created:', client);
 
 /* ---------------------------------------------------
-   TRANSFORM HELPERS (world → screen pixels)
+   CAR STATUS ENUM NAMES
+--------------------------------------------------- */
+const CarStatusNames = {
+    0: 'NOT READY',
+    1: 'WAITING',
+    2: 'RACING',
+    3: 'SERVING PENALTY',
+    99: 'FINISHED'
+};
+
+const RaceTypeNames = {
+    0: 'HOTLAP',
+    1: 'QUALIFYING',
+    2: 'RACE BY LAPS',
+    3: 'RACE BY TIME'
+};
+
+/* ---------------------------------------------------
+   TRANSFORM HELPERS
 --------------------------------------------------- */
 function computeTransform() {
-    if (!trackInfo) return;
+    console.log('[computeTransform] Starting...');
+    if (!trackInfo) {
+        console.log('[computeTransform] No trackInfo available');
+        return;
+    }
 
     const left  = trackInfo.getLeftBoundaryList() || [];
     const right = trackInfo.getRightBoundaryList() || [];
-    if (!left.length || !right.length) return;
+    console.log(`[computeTransform] Boundaries: left=${left.length}, right=${right.length}`);
+    
+    if (!left.length || !right.length) {
+        console.log('[computeTransform] No boundary points');
+        return;
+    }
 
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
@@ -39,6 +69,8 @@ function computeTransform() {
         minY = Math.min(minY, p.getY());
         maxY = Math.max(maxY, p.getY());
     });
+
+    console.log(`[computeTransform] Bounds: X=[${minX}, ${maxX}], Y=[${minY}, ${maxY}]`);
 
     const padding = 40;
     const w = trackCanvas.width  || 1100;
@@ -51,6 +83,8 @@ function computeTransform() {
 
     offsetX = padding - minX * scale;
     offsetY = padding - minY * scale;
+
+    console.log(`[computeTransform] Transform: scale=${scale.toFixed(2)}, offset=(${offsetX.toFixed(1)}, ${offsetY.toFixed(1)})`);
 }
 
 function worldToScreen(x, y) {
@@ -61,17 +95,33 @@ function worldToScreen(x, y) {
 }
 
 /* ---------------------------------------------------
-   DRAW TRACK ON CANVAS (background)
+   DRAW TRACK ON CANVAS
 --------------------------------------------------- */
 function drawTrack() {
-    if (!trackCanvas || !trackInfo) return;
+    console.log('[drawTrack] Starting...');
+    if (!trackCanvas) {
+        console.error('[drawTrack] No canvas element!');
+        return;
+    }
+    if (!trackInfo) {
+        console.log('[drawTrack] No track info yet');
+        return;
+    }
+
     const ctx = trackCanvas.getContext('2d');
+    console.log('[drawTrack] Canvas context:', ctx ? 'OK' : 'FAILED');
+    
     ctx.clearRect(0, 0, trackCanvas.width, trackCanvas.height);
 
     const left  = trackInfo.getLeftBoundaryList() || [];
     const right = trackInfo.getRightBoundaryList() || [];
 
-    if (!left.length || !right.length) return;
+    if (!left.length || !right.length) {
+        console.log('[drawTrack] No boundaries to draw');
+        return;
+    }
+
+    console.log(`[drawTrack] Drawing ${left.length} boundary points`);
 
     // Asphalt
     ctx.fillStyle = '#444';
@@ -108,16 +158,28 @@ function drawTrack() {
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
     ctx.stroke();
+
+    console.log('[drawTrack] Track drawn successfully');
 }
 
 /* ---------------------------------------------------
-   UPDATE / CREATE CAR DOM ELEMENTS
+   UPDATE CAR DISPLAY
 --------------------------------------------------- */
 function updateCarsDisplay() {
+    console.log(`[updateCarsDisplay] Updating ${carStates.size} cars`);
+    
     carStates.forEach((state, carId) => {
+        console.log(`[updateCarsDisplay] Car ${carId}:`, {
+            position: state.getPosition() ? `(${state.getPosition().getX()}, ${state.getPosition().getY()})` : 'null',
+            heading: state.getHeading(),
+            speed: state.getSpeed(),
+            status: state.getStatus()
+        });
+
         let el = document.getElementById(`car-${carId}`);
 
         if (!el) {
+            console.log(`[updateCarsDisplay] Creating new element for car ${carId}`);
             el = document.createElement('div');
             el.id = `car-${carId}`;
             el.className = 'car';
@@ -127,23 +189,41 @@ function updateCarsDisplay() {
         }
 
         const pos = state.getPosition();
-        if (!pos) return;
+        if (!pos) {
+            console.log(`[updateCarsDisplay] Car ${carId} has no position`);
+            return;
+        }
 
         const { left, top } = worldToScreen(pos.getX(), pos.getY());
         const heading = state.getHeading() || 0;
 
+        console.log(`[updateCarsDisplay] Car ${carId} screen position: ${left}, ${top}`);
+
         el.style.left = left;
         el.style.top  = top;
         el.style.transform = `rotate(${heading}deg)`;
-        el.title = `Speed: ${state.getSpeed()?.toFixed(1) || '?'} u/s\nLap: ${state.getLap() || '-'}`;
+        
+        // Status-based styling
+        const status = state.getStatus();
+        if (status === 3) { // SERVINGPENALTY
+            el.style.opacity = '0.5';
+            el.style.border = '3px solid #ff0000';
+        } else if (status === 99) { // FINISHED
+            el.style.opacity = '0.7';
+            el.style.border = '3px solid #00ff00';
+        } else {
+            el.style.opacity = '1';
+            el.style.border = '2px solid rgba(255,255,255,0.3)';
+        }
+
+        const statusName = CarStatusNames[status] || 'UNKNOWN';
+        el.title = `Status: ${statusName}\nSpeed: ${state.getSpeed()?.toFixed(1) || '?'} u/s\nLap: ${state.getLap() || '-'}`;
     });
 
     updateSidebarInfo();
+    updatePenaltiesDisplay();
 }
 
-/* ---------------------------------------------------
-   SIMPLE CAR COLOR BY ID
---------------------------------------------------- */
 function getCarColor(carId) {
     const palette = {
         'A': '#e63946', 'B': '#2a9d8f', 'C': '#457b9d',
@@ -153,9 +233,10 @@ function getCarColor(carId) {
 }
 
 /* ---------------------------------------------------
-   UPDATE SIDEBAR WITH LATEST CAR INFO
+   UPDATE SIDEBAR
 --------------------------------------------------- */
 function updateSidebarInfo() {
+    console.log('[updateSidebarInfo] Updating sidebar');
     carInfoList.innerHTML = '';
 
     carStates.forEach((state, carId) => {
@@ -164,10 +245,14 @@ function updateSidebarInfo() {
         div.style.borderLeft = `6px solid ${getCarColor(carId)}`;
 
         const pos = state.getPosition() || { getX: () => '?', getY: () => '?' };
+        const status = state.getStatus();
+        const statusName = CarStatusNames[status] || 'UNKNOWN';
+        const statusClass = status === 3 ? 'penalty-status' : status === 99 ? 'finished-status' : '';
 
         div.innerHTML = `
             <strong>Car ${carId}</strong>
-            Position: (${pos.getX()?.toFixed(1) || '?'} , ${pos.getY()?.toFixed(1) || '?'})<br>
+            <span class="${statusClass}" style="float:right; font-size:0.8em; font-weight:bold;">${statusName}</span><br>
+            Position: (${pos.getX()?.toFixed(1) || '?'}, ${pos.getY()?.toFixed(1) || '?'})<br>
             Speed: ${state.getSpeed()?.toFixed(1) || '?'} u/s<br>
             Heading: ${state.getHeading()?.toFixed(0) || '?'}°<br>
             Lap: ${state.getLap() || '-'}
@@ -182,33 +267,71 @@ function updateSidebarInfo() {
 }
 
 /* ---------------------------------------------------
-   CHECK-IN & GET TRACK
+   UPDATE PENALTIES
+--------------------------------------------------- */
+function updatePenaltiesDisplay() {
+    if (!penaltiesEl) return;
+
+    if (carPenalties.size === 0) {
+        penaltiesEl.style.display = 'none';
+        return;
+    }
+
+    console.log(`[updatePenaltiesDisplay] Showing ${carPenalties.size} penalties`);
+    penaltiesEl.style.display = 'block';
+    let html = '<h3>⚠️ Active Penalties</h3>';
+
+    carPenalties.forEach((penalty, carId) => {
+        const remainingSec = (penalty.getRemainingPenalty() / 1000).toFixed(1);
+        const color = getCarColor(carId);
+        html += `
+            <div class="penalty-item" style="border-left: 4px solid ${color};">
+                <strong>Car ${carId}</strong>: ${penalty.getReason()}<br>
+                <small>Remaining: ${remainingSec}s</small>
+            </div>
+        `;
+    });
+
+    penaltiesEl.innerHTML = html;
+}
+
+/* ---------------------------------------------------
+   INITIALIZE - LOAD TRACK
 --------------------------------------------------- */
 function initialize() {
+    console.log('[initialize] Starting initialization...');
     statusEl.textContent = 'Connecting...';
     statusEl.className = 'disconnected';
+    errorEl.textContent = '';
 
-    const req = new RegisterPlayer();
-    req.setCarId('OBSERVER');
-    req.setPlayerName('Web Tracker');
-    req.setPassword('spectator');
+    console.log('[initialize] Calling GetTrack...');
 
-    client.checkIn(req, {}, (err, res) => {
-        if (err || !res.getAccepted()) {
-            errorEl.textContent = err?.message || res?.getMessage() || 'Check-in failed';
+    // Load track using GetTrack
+    client.getTrack(new Empty(), {}, (err, track) => {
+        console.log('[GetTrack] Callback triggered');
+        
+        if (err) {
+            console.error('[GetTrack] ERROR:', err);
+            console.error('[GetTrack] Error details:', JSON.stringify(err));
+            errorEl.textContent = 'GetTrack failed: ' + (err.message || 'unknown');
             statusEl.textContent = 'Failed';
             return;
         }
 
-        statusEl.textContent = 'Connected';
+        console.log('[GetTrack] SUCCESS');
+        console.log('[GetTrack] Track object:', track);
+        console.log('[GetTrack] Track name:', track.getName());
+        console.log('[GetTrack] Track ID:', track.getTrackId());
+
+        trackInfo = track;
+        
+        computeTransform();
+        drawTrack();
+
+        statusEl.textContent = 'Connected (Observer)';
         statusEl.className = 'connected';
 
-        if (res.hasTrack()) {
-            trackInfo = res.getTrack();
-            computeTransform();
-            drawTrack();
-        }
-
+        console.log('[initialize] Starting race stream...');
         startStream();
     });
 }
@@ -217,41 +340,78 @@ function initialize() {
    RACE STREAM
 --------------------------------------------------- */
 function startStream() {
+    console.log('[startStream] Creating stream...');
     const stream = client.streamRaceUpdates(new Empty(), {});
+    console.log('[startStream] Stream object:', stream);
 
     stream.on('data', (raceUpdate) => {
         updateCount++;
         updatesEl.textContent = updateCount;
 
-        const cars = raceUpdate.getCarsList() || [];
-        if (cars.length === 0) return;
+        if (updateCount === 1) {
+            console.log('[stream:data] ★★★ FIRST RACE UPDATE RECEIVED ★★★');
+        }
+        if (updateCount % 60 === 0) {
+            console.log(`[stream:data] Update #${updateCount}`);
+        }
 
-        // Update latest state for each car
+        const cars = raceUpdate.getCarsList() || [];
+        console.log(`[stream:data] Received ${cars.length} cars`);
+        
+        // Update car states
         cars.forEach(car => {
-            carStates.set(car.getCarId(), car);
+            const carId = car.getCarId();
+            console.log(`[stream:data] Car ${carId}: status=${car.getStatus()}, speed=${car.getSpeed()}`);
+            carStates.set(carId, car);
+        });
+
+        // Update penalties
+        carPenalties.clear();
+        const penalties = raceUpdate.getPenaltiesList() || [];
+        if (penalties.length > 0) {
+            console.log(`[stream:data] Received ${penalties.length} penalties`);
+        }
+        penalties.forEach(penalty => {
+            carPenalties.set(penalty.getCarId(), penalty);
         });
 
         // Update UI
         updateCarsDisplay();
 
-        // Optional: show race status
+        // Show race status
         const status = raceUpdate.getRaceStatus();
         if (status) {
-            raceInfoEl.textContent = `Status: ${status.getStatus() || '?'} • Laps: ${status.getTotalLaps() || '?'} • Time: ${(status.getRaceTime()/1000).toFixed(1)}s`;
+            const gameTick = status.getGameTick() || 0;
+            const statusText = status.getStatus() || '?';
+            const totalLaps = status.getTotalLaps() || '?';
+            raceInfoEl.textContent = `Status: ${statusText} • Laps: ${totalLaps} • Tick: ${gameTick}`;
         }
     });
 
     stream.on('error', err => {
-        console.error('Stream error:', err);
+        console.error('[stream:error] ERROR:', err);
+        console.error('[stream:error] Error details:', JSON.stringify(err));
         errorEl.textContent = 'Stream error: ' + (err.message || 'unknown');
+        statusEl.textContent = 'Stream failed';
+        statusEl.className = 'disconnected';
     });
 
     stream.on('end', () => {
-        console.log('Stream ended');
+        console.log('[stream:end] Stream ended normally');
+        statusEl.textContent = 'Disconnected';
+        statusEl.className = 'disconnected';
     });
+
+    stream.on('status', status => {
+        console.log('[stream:status]', status);
+    });
+
+    console.log('[startStream] Stream listeners attached');
 }
 
 /* ---------------------------------------------------
    START
 --------------------------------------------------- */
+console.log('[main] Calling initialize()...');
 initialize();
+console.log('[main] Initialize() called, waiting for async responses...');

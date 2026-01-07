@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Racing Car Tracker</title>
+    
+    <!-- Cache busting headers -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <style>
         * {
             margin: 0;
@@ -47,19 +52,16 @@
             position: relative;
             width: 100%;
             height: 500px;
-            background: linear-gradient(to bottom, 
-                #48bb78,
-                #48bb78
-                
-            );
+            background: linear-gradient(to bottom, #48bb78, #48bb78);
             border-radius: 10px;
             overflow: hidden;
             border: 4px solid #1a202c;
         } 
         #cars-container {
-            position: relative;
+            position: absolute;
             width: 100%;
             height: 100%;
+            z-index: 3;
         }
         .car {
             position: absolute;
@@ -83,6 +85,25 @@
             left: -25px;
             font-size: 24px;
         }
+        .penalties-container {
+            display: none;
+            background: rgba(255, 0, 0, 0.1);
+            border: 2px solid #ff0000;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .penalties-container h3 {
+            color: #e53e3e;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        .penalty-item {
+            margin: 5px 0;
+            padding: 8px;
+            background: rgba(255,0,0,0.1);
+            border-radius: 5px;
+        }
         .sidebar {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -101,6 +122,14 @@
             font-size: 1.1em;
             display: block;
             margin-bottom: 5px;
+        }
+        .penalty-status {
+            color: #ff0000;
+            font-weight: bold;
+        }
+        .finished-status {
+            color: #00ff00;
+            font-weight: bold;
         }
         .status-bar {
             margin-top: 20px;
@@ -126,27 +155,6 @@
             color: #e53e3e;
             margin-top: 5px;
         }
-        .legend {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin-top: 15px;
-            flex-wrap: wrap;
-        }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 5px 10px;
-            background: #f7fafc;
-            border-radius: 5px;
-        }
-        .legend-color {
-            width: 20px;
-            height: 20px;
-            border-radius: 3px;
-            border: 2px solid #2d3748;
-        }
     </style>
 </head>
 <body>
@@ -156,27 +164,16 @@
         <div id="race-info" class="race-info">
             Waiting for race data...
         </div>
-        <div class="track-container">
-    <canvas id="track-canvas" width="1100" height="500"
-        style="
-            position:absolute;
-            top:0;
-            left:0;
-            z-index:1;
-        ">
-    </canvas>
 
-    <div class="road-lines" style="z-index:2; pointer-events:none;">
-        <div class="road-line"></div>
-        <div class="road-line"></div>
-        <div class="road-line"></div>
-        <div class="road-line"></div>
-    </div>
-
-    <div id="cars-container" style="z-index:3;"></div>
-</div>
-
+        <div id="penalties" class="penalties-container"></div>
         
+        <div class="track-container">
+            <canvas id="track-canvas" width="1100" height="500"
+                style="position:absolute; top:0; left:0; z-index:1;">
+            </canvas>
+            <div id="cars-container"></div>
+        </div>
+
         <div class="sidebar">
             <div id="car-info-list"></div>
         </div>
@@ -188,6 +185,16 @@
         </div>
     </div>
 
-    <script src="dist/bundle.js"></script>
+    <!-- Cache-busted script loading -->
+    <script>
+        // Add timestamp to bust cache
+        const timestamp = new Date().getTime();
+        const script = document.createElement('script');
+        script.src = `dist/bundle.js?v=${timestamp}`;
+        script.onerror = function() {
+            document.getElementById('error').textContent = 'Failed to load bundle.js - check if webpack is running';
+        };
+        document.body.appendChild(script);
+    </script>
 </body>
 </html>

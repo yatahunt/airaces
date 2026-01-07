@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   server:
@@ -11,53 +10,63 @@ services:
       - racing-net
 
   gocar-a:
-    image: gocar:latest  # Reference the built image
+    image: gocar:latest
     build:
       context: ./gocar
       dockerfile: Dockerfile
     environment:
       - SERVER_ADDR=server:50051 
       - CAR_LETTER=A
+    volumes:
+      - ./learning-data/car-a:/data
     depends_on:
       - server     
     networks:
       - racing-net
 
   gocar-b:
-    image: gocar:latest  # Reuses the same image
+    image: gocar:latest
     environment:
       - SERVER_ADDR=server:50051 
       - CAR_LETTER=B
+    volumes:
+      - ./learning-data/car-b:/data
     depends_on:
       - server     
     networks:
       - racing-net
 
   gocar-c:
-    image: gocar:latest  # Reuses the same image
+    image: gocar:latest
     environment:
       - SERVER_ADDR=server:50051 
       - CAR_LETTER=C
+    volumes:
+      - ./learning-data/car-c:/data
     depends_on:
       - server     
     networks:
       - racing-net
 
   gocar-d:
-    image: gocar:latest  # Reuses the same image
+    image: gocar:latest
     environment:
       - SERVER_ADDR=server:50051 
       - CAR_LETTER=D
+    volumes:
+      - ./learning-data/car-d:/data
     depends_on:
       - server     
     networks:
       - racing-net
 
   gocar-e:
-    image: gocar:latest  # Reuses the same image
+    image: gocar:latest
     environment:
       - SERVER_ADDR=server:50051 
       - CAR_LETTER=E
+    volumes:
+      - ./learning-data/car-e:/data
     depends_on:
       - server     
     networks:
@@ -82,7 +91,7 @@ services:
     ports:
       - "8080:80"
     depends_on: 
-      - envoy
+      - envoy  
     networks:
       - racing-net
 

@@ -30,7 +30,6 @@ const (
 	brakeForce       = float32(400.0)
 	friction         = float32(50.0)
 	turnSpeed        = float32(180.0)
-	boostMultiplier  = float32(1.5)
 )
 
 type TrackPoint struct {
@@ -44,16 +43,13 @@ type PlayerInput struct {
 	steering  float32
 	throttle  float32
 	brake     float32
-	boost     bool
 	timestamp int32
 }
 
 type CarInfo struct {
 	carId  string
-	team   string
 	power  float32
-	color  string
-	driver string
+	weight float32
 	x      float32
 	y      float32
 	z      float32
@@ -66,11 +62,13 @@ type CarServer struct {
 	carStates   map[string]*pb.CarState
 	playerInput map[string]*PlayerInput
 	authTokens  map[string]string
+	penalties   map[string]*pb.CarPenalty
 	raceStatus  *pb.RaceStatus
 	raceStarted time.Time
 	gameTick    int32
 	clients     map[chan *pb.RaceUpdate]struct{}
 	track       *pb.TrackInfo
+	raceType    pb.RaceType
 }
 
 func loadTrackFromCSV(filename string) (*pb.TrackInfo, error) {
@@ -175,9 +173,7 @@ func NewCarServer() *CarServer {
 	carStates := make(map[string]*pb.CarState)
 	playerInput := make(map[string]*PlayerInput)
 	authTokens := make(map[string]string)
-
-	colors := []string{"#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF"}
-	drivers := []string{"Alice", "Bob", "Charlie", "Diana", "Eve"}
+	penalties := make(map[string]*pb.CarPenalty)
 
 	// Load track from CSV
 	track, err := loadTrackFromCSV("./tracks/hockenheim.csv")
@@ -193,17 +189,16 @@ func NewCarServer() *CarServer {
 		carId := string(rune('A' + i))
 		carInfos[i] = CarInfo{
 			carId:  carId,
-			team:   "Team " + string(rune('1'+i)),
 			power:  float32(80 + i*5),
-			color:  colors[i],
-			driver: drivers[i],
+			weight: float32(1000 + i*50),
 			x:      startX,
 			y:      startY + float32(i*10),
 			z:      0.0,
 		}
 
 		carStates[carId] = &pb.CarState{
-			CarId: carId,
+			CarId:  carId,
+			Status: pb.CarStatus_WAITING,
 			Position: &pb.Point3D{
 				X: carInfos[i].x,
 				Y: carInfos[i].y,
@@ -227,15 +222,22 @@ func NewCarServer() *CarServer {
 		carStates:   carStates,
 		playerInput: playerInput,
 		authTokens:  authTokens,
+		penalties:   penalties,
 		raceStatus: &pb.RaceStatus{
 			Status:    "racing",
 			TotalLaps: totalLaps,
-			RaceTime:  0,
+			GameTick:  0,
 		},
 		raceStarted: time.Now(),
 		clients:     make(map[chan *pb.RaceUpdate]struct{}),
 		gameTick:    0,
 		track:       track,
+		raceType:    pb.RaceType_RACEBYLAPS,
+	}
+
+	// Set all cars to RACING status
+	for _, state := range carStates {
+		state.Status = pb.CarStatus_RACING
 	}
 
 	go s.physicsLoop()
@@ -255,14 +257,23 @@ func (s *CarServer) GetTrack(ctx context.Context, req *pb.Empty) (*pb.TrackInfo,
 func (s *CarServer) CheckIn(ctx context.Context, req *pb.RegisterPlayer) (*pb.CheckInResponse, error) {
 	carId := req.GetCarId()
 
+	// Check if this is a spectator
+	isSpectator := false
+	token := ""
+
 	// Validate if car exists
 	s.mu.RLock()
-	token, exists := s.authTokens[carId]
+	existingToken, exists := s.authTokens[carId]
 	s.mu.RUnlock()
+
 	if !exists && observersallowed && carId == observersID {
 		token = observerstoken
 		exists = true
+		isSpectator = true
+	} else if exists {
+		token = existingToken
 	}
+
 	if !exists {
 		return &pb.CheckInResponse{
 			Accepted: false,
@@ -273,27 +284,23 @@ func (s *CarServer) CheckIn(ctx context.Context, req *pb.RegisterPlayer) (*pb.Ch
 	// In production, validate password here
 	// For demo, we accept all check-ins
 
-	// Build car info list
 	s.mu.RLock()
-	carInfos := make([]*pb.CarInfo, len(s.carInfos))
-	for i, info := range s.carInfos {
-		carInfos[i] = &pb.CarInfo{
-			CarId:  info.carId,
-			Team:   info.team,
-			Power:  info.power,
-			Color:  info.color,
-			Driver: info.driver,
-		}
-	}
 	track := s.track
+	raceType := s.raceType
 	s.mu.RUnlock()
 
+	message := "Welcome to the race!"
+	if isSpectator {
+		message = "Welcome spectator!"
+	}
+
 	return &pb.CheckInResponse{
-		Accepted:  true,
-		AuthToken: token,
-		Message:   "Welcome to the race!",
-		Cars:      carInfos,
-		Track:     track,
+		Accepted:    true,
+		AuthToken:   token,
+		Message:     message,
+		IsSpectator: isSpectator,
+		Track:       track,
+		Race:        raceType,
 	}, nil
 }
 
@@ -321,7 +328,6 @@ func (s *CarServer) SendPlayerInput(ctx context.Context, input *pb.PlayerInput) 
 		steering:  input.GetSteering(),
 		throttle:  input.GetThrottle(),
 		brake:     input.GetBrake(),
-		boost:     input.GetBoost(),
 		timestamp: input.GetTimestamp(),
 	}
 	s.mu.Unlock()
@@ -376,17 +382,37 @@ func (s *CarServer) physicsLoop() {
 		for _, car := range s.carInfos {
 			state := s.carStates[car.carId]
 			input := s.playerInput[car.carId]
-			s.updateCarPhysics(state, input, dt)
 
-			// Determine leader (by lap and progress along track)
-			progress := s.calculateTrackProgress(state.Position)
-			if state.Lap > maxLap || (state.Lap == maxLap && progress > maxProgress) {
-				maxLap = state.Lap
-				maxProgress = progress
+			// Update penalty timers
+			if penalty, hasPenalty := s.penalties[car.carId]; hasPenalty {
+				penalty.RemainingPenalty -= int32(dt * 1000) // Convert to milliseconds
+				if penalty.RemainingPenalty <= 0 {
+					delete(s.penalties, car.carId)
+					state.Status = pb.CarStatus_RACING
+				} else {
+					state.Status = pb.CarStatus_SERVINGPENALTY
+				}
+			}
+
+			// Only update physics if car is racing (not serving penalty or finished)
+			if state.Status == pb.CarStatus_RACING {
+				s.updateCarPhysics(state, input, dt)
+
+				// Determine leader (by lap and progress along track)
+				progress := s.calculateTrackProgress(state.Position)
+				if state.Lap > maxLap || (state.Lap == maxLap && progress > maxProgress) {
+					maxLap = state.Lap
+					maxProgress = progress
+				}
+
+				// Check if finished
+				if state.Lap >= totalLaps {
+					state.Status = pb.CarStatus_FINISHED
+				}
 			}
 		}
 
-		s.raceStatus.RaceTime = int32(time.Since(s.raceStarted).Milliseconds())
+		s.raceStatus.GameTick = s.gameTick
 		if maxLap >= totalLaps {
 			s.raceStatus.Status = "finished"
 		}
@@ -432,11 +458,7 @@ func (s *CarServer) calculateTrackProgress(pos *pb.Point3D) float32 {
 func (s *CarServer) updateCarPhysics(state *pb.CarState, input *PlayerInput, dt float32) {
 	// Apply acceleration/brake
 	if input.throttle > 0 {
-		acc := acceleration
-		if input.boost {
-			acc *= boostMultiplier
-		}
-		state.Speed += acc * input.throttle * dt
+		state.Speed += acceleration * input.throttle * dt
 	} else if input.brake > 0 {
 		state.Speed -= brakeForce * input.brake * dt
 	} else {
@@ -446,12 +468,8 @@ func (s *CarServer) updateCarPhysics(state *pb.CarState, input *PlayerInput, dt 
 	if state.Speed < 0 {
 		state.Speed = 0
 	}
-	maxS := maxSpeed
-	if input.boost {
-		maxS *= boostMultiplier
-	}
-	if state.Speed > maxS {
-		state.Speed = maxS
+	if state.Speed > maxSpeed {
+		state.Speed = maxSpeed
 	}
 
 	// Steering
@@ -479,26 +497,32 @@ func (s *CarServer) updateCarPhysics(state *pb.CarState, input *PlayerInput, dt 
 	if progress < 0.1 && state.Speed > 0 {
 		// Crossed finish line (detect lap completion logic here)
 	}
-
-	state.CurrentSteering = input.steering
-	state.CurrentThrottle = input.throttle
 }
 
 func (s *CarServer) createRaceUpdate() *pb.RaceUpdate {
 	states := make([]*pb.CarState, 0, len(s.carStates))
 	for _, state := range s.carStates {
 		states = append(states, &pb.CarState{
-			CarId: state.CarId,
+			CarId:  state.CarId,
+			Status: state.Status,
 			Position: &pb.Point3D{
 				X: state.Position.X,
 				Y: state.Position.Y,
 				Z: state.Position.Z,
 			},
-			Heading:         state.Heading,
-			Speed:           state.Speed,
-			Lap:             state.Lap,
-			CurrentSteering: state.CurrentSteering,
-			CurrentThrottle: state.CurrentThrottle,
+			Heading: state.Heading,
+			Speed:   state.Speed,
+			Lap:     state.Lap,
+		})
+	}
+
+	penalties := make([]*pb.CarPenalty, 0, len(s.penalties))
+	for _, penalty := range s.penalties {
+		penalties = append(penalties, &pb.CarPenalty{
+			CarId:            penalty.CarId,
+			Reason:           penalty.Reason,
+			GameTick:         penalty.GameTick,
+			RemainingPenalty: penalty.RemainingPenalty,
 		})
 	}
 
@@ -506,10 +530,11 @@ func (s *CarServer) createRaceUpdate() *pb.RaceUpdate {
 		RaceStatus: &pb.RaceStatus{
 			Status:    s.raceStatus.Status,
 			TotalLaps: s.raceStatus.TotalLaps,
-			RaceTime:  s.raceStatus.RaceTime,
+			GameTick:  s.raceStatus.GameTick,
 		},
-		Cars:     states,
-		GameTick: s.gameTick,
+		Cars:      states,
+		Penalties: penalties,
+		GameTick:  s.gameTick,
 	}
 }
 

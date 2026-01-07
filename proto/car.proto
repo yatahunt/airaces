@@ -39,15 +39,25 @@ message TrackInfo {
   repeated Point3D left_boundary = 3; // Left edge of track
   repeated Point3D right_boundary = 4; // Right edge of track
 }
+enum RaceType {
+  HOTLAP = 0;
+  QUALY = 1;
+  RACEBYLAPS = 2;
+  RACEBYTIME = 3;
 
+}
+message RaceDescription{
+ RaceType racetype = 1; 
+  int32 laps = 100;
+  int32 time = 101;
+
+}
 // ---------------------------------------------------
 // Static car information
 message CarInfo {
-  string car_id = 1;
-  string team = 2;
+  string car_id = 1; 
   float power = 3; // Engine power (0-100 scale)
-  string color = 4; // Car color for display
-  string driver = 5; // Driver name
+  float weight = 4;
 }
 
 // ---------------------------------------------------
@@ -65,9 +75,9 @@ message CheckInResponse {
   string auth_token = 2; // Token to use in PlayerInput (empty for spectators)
   string message = 3; // Error or success message
   bool is_spectator = 4; // True if logged in as spectator
-  
-  repeated CarInfo cars = 5; // All cars in race
-  TrackInfo track = 6; // Track boundaries
+
+  TrackInfo track = 5; // Track boundaries
+  RaceType race = 6;
 }
 
 // ---------------------------------------------------
@@ -79,9 +89,8 @@ message PlayerInput {
   float steering = 3; // -1.0 to 1.0
   float throttle = 4; // 0.0 to 1.0
   float brake = 5; // 0.0 to 1.0
-  bool boost = 6;
 
-  int32 timestamp = 7;
+  int32 timestamp = 99;
 }
 
 // ---------------------------------------------------
@@ -91,26 +100,39 @@ message InputAck {
   string reason = 2;
   int32 game_loop = 3;
 }
+enum CarStatus {
+  NOTREADY = 0;
+  WAITING = 1;
+  RACING = 2;
+  SERVINGPENALTY = 3;
+  FINISHED = 99;
+}
+ 
 
 // ---------------------------------------------------
 // Dynamic car state during race
 message CarState {
   string car_id = 1;
-  Point3D position = 2;
-  float heading = 3;
-  float speed = 4;
-  int32 lap = 5;
+  CarStatus status = 2;
+  Point3D position = 3;
+  float heading = 4;
+  float speed = 5;
+  int32 lap = 6;
   
-  float current_steering = 6;
-  float current_throttle = 7;
 }
-
+message CarPenalty {
+  string car_id = 1;
+  string reason = 2;
+  int32 game_tick = 3;
+  int32 remaining_penalty = 4;
+  
+}
 // ---------------------------------------------------
 // Race status information
 message RaceStatus {
   string status = 1; // "waiting", "racing", "finished"
   int32 total_laps = 2;
-  int32 race_time = 3;
+  int32 game_tick = 3;
 }
 
 // ---------------------------------------------------
@@ -118,5 +140,6 @@ message RaceStatus {
 message RaceUpdate {
   RaceStatus race_status = 1;
   repeated CarState cars = 2;
-  int32 game_tick = 3;
+  repeated CarPenalty penalties = 3;
+  int32 game_tick = 100;
 }
