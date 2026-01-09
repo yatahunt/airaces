@@ -135,11 +135,21 @@ message RaceStatus {
   int32 game_tick = 3;
 }
 
+message CarInterval{
+  string car_id = 1;
+  int32 position = 2;
+  int32 laps = 3;
+  float interval = 4;
+  
+
+}
 // ---------------------------------------------------
 // Race update (streamed continuously)
 message RaceUpdate {
   RaceStatus race_status = 1;
   repeated CarState cars = 2;
   repeated CarPenalty penalties = 3;
+  repeated CarInterval to_leader =4;
+  repeated CarInterval for_position = 5;
   int32 game_tick = 100;
 }
