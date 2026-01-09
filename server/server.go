@@ -15,7 +15,7 @@ func NewCarServer() *CarServer {
 	penalties := make(map[string]*pb.CarPenalty)
 
 	// Load track from CSV
-	track, err := loadTrackFromCSV("./tracks/hockenheim.csv")
+	track, err := loadTrackFromCSV("./tracks/Barcelona.csv")
 	if err != nil {
 		log.Fatalf("Failed to load track: %v", err)
 	}
